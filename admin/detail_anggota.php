@@ -305,6 +305,8 @@ function formatRupiah($angka) {
                             </div>
                         </div>
                         
+                        <?php include __DIR__ . '/../includes/kartu_dokumen_anggota.php'; ?>
+                        
                         <!-- Savings Summary -->
                         <div class="card mb-4 savings-card">
                             <div class="card-header bg-success text-white">
@@ -604,5 +606,6 @@ function formatRupiah($angka) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <?php include __DIR__ . '/../includes/modal_dokumen.php'; ?>
 </body>
 </html>

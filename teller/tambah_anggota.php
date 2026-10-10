@@ -21,6 +21,9 @@ function generateKodeAnggota() {
 
 $kode_otomatis = generateKodeAnggota();
 
+// Upload melebihi post_max_size membuat $_POST kosong; tampilkan pesan yang jelas
+cekPostMelebihiBatas();
+
 // Handle tambah anggota
 if ($_POST) {
     if (isset($_POST['tambah_anggota'])) {
@@ -40,6 +43,11 @@ if ($_POST) {
         $user_id = $_SESSION['user_id'];
 
         try {
+            $db->beginTransaction();
+            
+            // Validasi dokumen (finfo, maks. 10 MB) sebelum data disimpan
+            $dokumen = validasiDokumenAnggota();
+            
             // Insert data anggota
             $query = "INSERT INTO anggota (kode_anggota, nama_lengkap, alamat, telepon, email, tempat_lahir, tanggal_lahir, jenis_kelamin, pekerjaan, ktp, rekening_bank, tanggal_daftar, status, user_id) 
                      VALUES (:kode_anggota, :nama_lengkap, :alamat, :telepon, :email, :tempat_lahir, :tanggal_lahir, :jenis_kelamin, :pekerjaan, :ktp, :rekening_bank, :tanggal_daftar, :status, :user_id)";
@@ -60,6 +68,8 @@ if ($_POST) {
             $stmt->bindParam(':user_id', $user_id);
             
             if ($stmt->execute()) {
+                simpanDokumenAnggota($db, $db->lastInsertId(), $dokumen);
+                $db->commit();
                 $_SESSION['success'] = "Anggota berhasil ditambahkan";
                 header("Location: tambah_anggota.php");
                 exit();
@@ -67,6 +77,9 @@ if ($_POST) {
                 throw new Exception("Gagal menambahkan anggota");
             }
         } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
             $_SESSION['error'] = "Gagal menambahkan anggota: " . $e->getMessage();
         }
     }
@@ -347,7 +360,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                 </h5>
                             </div>
                             <div class="card-body">
-                                <form method="POST">
+                                <form method="POST" enctype="multipart/form-data">
                                     <div class="row">
                                         <div class="col-md-6">
                                             <div class="mb-3">
@@ -446,6 +459,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             </div>
                                         </div>
                                     </div>
+
+                                    <?php $dok_prefix = 'tambah'; $dok_anggota = null; include __DIR__ . '/../includes/form_dokumen_anggota.php'; ?>
 
                                     <div class="mb-3">
                                         <label class="form-label">Status *</label>
@@ -551,6 +566,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <?php include __DIR__ . '/../includes/modal_dokumen.php'; ?>
     <script>
         function resetForm() {
             document.querySelector('form').reset();

@@ -1,0 +1,23 @@
+# Folder dokumen anggota: hanya file gambar, eksekusi script diblokir.
+Options -Indexes -ExecCGI
+
+# Tolak semua file yang bukan gambar (termasuk .php, .phtml, .phar, dll.)
+<FilesMatch "(?i)\.(php\d?|phtml|phar|pht|shtml|cgi|pl|py|sh|asp|aspx|jsp|htaccess|htpasswd)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php5.c>
+    php_flag engine off
+</IfModule>
+
+RemoveHandler .php .phtml .php5 .php7 .phar
+RemoveType .php .phtml .php5 .php7 .phar
+
+# Pastikan tipe gambar terkirim benar
+AddType image/webp .webp

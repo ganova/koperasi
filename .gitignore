@@ -1,6 +1,10 @@
 # Data pribadi anggota & file upload (jangan di-commit)
-assets/uploads/
-uploads/anggota/
+assets/uploads/*
+!assets/uploads/ktp/
+assets/uploads/ktp/*
+!assets/uploads/ktp/.htaccess
+uploads/anggota/*
+!uploads/anggota/.htaccess
 uploads/logo/
 backups/
 *.log

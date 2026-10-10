@@ -2,6 +2,7 @@
 // config/functions.php
 
 require_once __DIR__ . '/../includes/pinjaman_helper.php';
+require_once __DIR__ . '/../includes/dokumen_anggota.php';
 
 // TAMBAHKAN kondisi cek function untuk semua function
 

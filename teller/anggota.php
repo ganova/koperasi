@@ -2,6 +2,9 @@
 require_once '../includes/auth.php';
 require_once '../config/config.php';
 
+// Upload melebihi post_max_size membuat $_POST kosong; tampilkan pesan yang jelas
+cekPostMelebihiBatas();
+
 // Handle form actions
 if ($_POST) {
     if (isset($_POST['add'])) {
@@ -18,25 +21,13 @@ if ($_POST) {
         $rekening_bank = $_POST['rekening_bank'];
         $tanggal_daftar = $_POST['tanggal_daftar'];
         
-        // Handle file upload KTP
-        $foto_ktp = '';
-        if (isset($_FILES['foto_ktp']) && $_FILES['foto_ktp']['error'] == 0) {
-            $upload_dir = '../assets/uploads/ktp/';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
-            }
-            
-            $file_extension = pathinfo($_FILES['foto_ktp']['name'], PATHINFO_EXTENSION);
-            $filename = 'ktp_' . $kode_anggota . '_' . time() . '.' . $file_extension;
-            $upload_file = $upload_dir . $filename;
-            
-            if (move_uploaded_file($_FILES['foto_ktp']['tmp_name'], $upload_file)) {
-                $foto_ktp = $filename;
-            }
-        }
+        $foto_ktp = null; // diisi simpanDokumenAnggota()
         
         try {
             $db->beginTransaction();
+            
+            // Validasi dokumen (finfo, maks. 10 MB) sebelum data disimpan
+            $dokumen = validasiDokumenAnggota();
             
             // Check if kode anggota already exists
             $check_query = "SELECT id FROM anggota WHERE kode_anggota = :kode_anggota";
@@ -85,6 +76,8 @@ if ($_POST) {
             
             $anggota_id = $db->lastInsertId();
             
+            simpanDokumenAnggota($db, $anggota_id, $dokumen);
+            
             // Create default simpanan records
             $query_jenis = "SELECT id FROM jenis_simpanan WHERE status = 'aktif'";
             $stmt_jenis = $db->prepare($query_jenis);
@@ -123,30 +116,14 @@ if ($_POST) {
         $rekening_bank = $_POST['rekening_bank'];
         $status = $_POST['status'];
         
-        // Handle file upload KTP
-        $foto_ktp = $_POST['foto_ktp_old'];
-        if (isset($_FILES['foto_ktp']) && $_FILES['foto_ktp']['error'] == 0) {
-            $upload_dir = '../assets/uploads/ktp/';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
-            }
-            
-            // Delete old file if exists
-            if ($foto_ktp && file_exists($upload_dir . $foto_ktp)) {
-                unlink($upload_dir . $foto_ktp);
-            }
-            
-            $file_extension = pathinfo($_FILES['foto_ktp']['name'], PATHINFO_EXTENSION);
-            $filename = 'ktp_' . $kode_anggota . '_' . time() . '.' . $file_extension;
-            $upload_file = $upload_dir . $filename;
-            
-            if (move_uploaded_file($_FILES['foto_ktp']['tmp_name'], $upload_file)) {
-                $foto_ktp = $filename;
-            }
-        }
-        
         try {
             $db->beginTransaction();
+            
+            // Dokumen lama (untuk cek wajib & hapus file yang diganti)
+            $stmt_dok = $db->prepare("SELECT foto_ktp, foto_kk, foto_ktp_pasangan FROM anggota WHERE id = ?");
+            $stmt_dok->execute([$id]);
+            $dokumen_lama = $stmt_dok->fetch(PDO::FETCH_ASSOC);
+            $dokumen = validasiDokumenAnggota($dokumen_lama);
             
             // Check if kode anggota already exists (excluding current record)
             $check_query = "SELECT id FROM anggota WHERE kode_anggota = :kode_anggota AND id != :id";
@@ -162,7 +139,7 @@ if ($_POST) {
             $query = "UPDATE anggota SET kode_anggota = :kode_anggota, nama_lengkap = :nama_lengkap, 
                       alamat = :alamat, telepon = :telepon, email = :email, tempat_lahir = :tempat_lahir,
                       tanggal_lahir = :tanggal_lahir, jenis_kelamin = :jenis_kelamin, pekerjaan = :pekerjaan,
-                      ktp = :ktp, foto_ktp = :foto_ktp, rekening_bank = :rekening_bank, status = :status
+                      ktp = :ktp, rekening_bank = :rekening_bank, status = :status
                       WHERE id = :id";
             $stmt = $db->prepare($query);
             $stmt->bindParam(':id', $id);
@@ -176,7 +153,6 @@ if ($_POST) {
             $stmt->bindParam(':jenis_kelamin', $jenis_kelamin);
             $stmt->bindParam(':pekerjaan', $pekerjaan);
             $stmt->bindParam(':ktp', $ktp);
-            $stmt->bindParam(':foto_ktp', $foto_ktp);
             $stmt->bindParam(':rekening_bank', $rekening_bank);
             $stmt->bindParam(':status', $status);
             
@@ -190,6 +166,8 @@ if ($_POST) {
                 $stmt_user->bindParam(':status', $status);
                 $stmt_user->bindParam(':id', $id);
                 $stmt_user->execute();
+                
+                simpanDokumenAnggota($db, $id, $dokumen, $dokumen_lama);
                 
                 $db->commit();
                 $_SESSION['success'] = "Data anggota berhasil diupdate";
@@ -227,19 +205,16 @@ if ($_POST) {
             $db->beginTransaction();
             
             // Get user_id and foto_ktp before deletion
-            $query_get = "SELECT user_id, foto_ktp FROM anggota WHERE id = :id";
+            $query_get = "SELECT user_id, foto_ktp, foto_kk, foto_ktp_pasangan FROM anggota WHERE id = :id";
             $stmt_get = $db->prepare($query_get);
             $stmt_get->bindParam(':id', $id);
             $stmt_get->execute();
             $data = $stmt_get->fetch(PDO::FETCH_ASSOC);
             
             if ($data) {
-                // Delete foto_ktp file if exists
-                if ($data['foto_ktp']) {
-                    $upload_dir = '../assets/uploads/ktp/';
-                    if (file_exists($upload_dir . $data['foto_ktp'])) {
-                        unlink($upload_dir . $data['foto_ktp']);
-                    }
+                // Hapus file dokumen anggota
+                foreach (array_keys(daftarDokumenAnggota()) as $field) {
+                    hapusFileDokumenAnggota($data[$field]);
                 }
                 
                 // Delete simpanan records
@@ -539,7 +514,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             <td><?php echo $anggota['telepon'] ?: '-'; ?></td>
                                             <td>
                                                 <?php if ($anggota['foto_ktp']): ?>
-                                                    <a href="../assets/uploads/ktp/<?php echo $anggota['foto_ktp']; ?>" target="_blank" class="btn btn-sm btn-outline-info">
+                                                    <a href="<?php echo htmlspecialchars(urlDokumenAnggota($anggota['foto_ktp'])); ?>" target="_blank" class="btn btn-sm btn-outline-info">
                                                         <i class="fas fa-eye"></i> Lihat KTP
                                                     </a>
                                                 <?php else: ?>
@@ -576,7 +551,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                         data-jenis_kelamin="<?php echo $anggota['jenis_kelamin']; ?>"
                                                         data-pekerjaan="<?php echo $anggota['pekerjaan']; ?>"
                                                         data-ktp="<?php echo $anggota['ktp']; ?>"
-                                                        data-foto_ktp="<?php echo $anggota['foto_ktp']; ?>"
+                                                        data-dokumen="<?php echo htmlspecialchars(json_encode(array_map('urlDokumenAnggota', array_intersect_key($anggota, daftarDokumenAnggota()))), ENT_QUOTES); ?>"
                                                         data-rekening_bank="<?php echo $anggota['rekening_bank']; ?>"
                                                         data-status="<?php echo $anggota['status']; ?>"
                                                         data-tanggal_daftar="<?php echo $anggota['tanggal_daftar']; ?>"
@@ -675,13 +650,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                             </div>
                         </div>
                         <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Foto KTP</label>
-                                    <input type="file" name="foto_ktp" class="form-control" accept="image/*">
-                                    <small class="text-muted">Format: JPG, PNG (Max: 2MB)</small>
-                                </div>
-                            </div>
+                        </div>
+                        <?php $dok_prefix = 'add'; $dok_anggota = null; include __DIR__ . '/../includes/form_dokumen_anggota.php'; ?>
+                        <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">No. Rekening Bank</label>
@@ -722,7 +693,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                     </div>
                     <div class="modal-body">
                         <input type="hidden" name="id" id="edit_id">
-                        <input type="hidden" name="foto_ktp_old" id="edit_foto_ktp_old">
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
@@ -773,13 +743,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                             </div>
                         </div>
                         <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Foto KTP</label>
-                                    <input type="file" name="foto_ktp" class="form-control" accept="image/*">
-                                    <small class="text-muted" id="current_ktp"></small>
-                                </div>
-                            </div>
+                        </div>
+                        <?php $dok_prefix = 'edit'; $dok_anggota = null; include __DIR__ . '/../includes/form_dokumen_anggota.php'; ?>
+                        <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">No. Rekening Bank</label>
@@ -846,6 +812,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
     <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <?php include __DIR__ . '/../includes/modal_dokumen.php'; ?>
+    <script>var DOKUMEN_LABEL = <?php echo json_encode(daftarDokumenAnggota()); ?>;</script>
     <script>
         // Edit Modal
         var editModal = document.getElementById('editModal');
@@ -866,9 +834,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             document.getElementById('edit_status').value = button.getAttribute('data-status');
             document.getElementById('edit_tanggal_daftar').value = button.getAttribute('data-tanggal_daftar');
             
-            var foto_ktp = button.getAttribute('data-foto_ktp');
-            document.getElementById('edit_foto_ktp_old').value = foto_ktp;
-            document.getElementById('current_ktp').textContent = foto_ktp ? 'File saat ini: ' + foto_ktp : 'Belum ada file KTP';
+            isiPreviewDokumen('edit', JSON.parse(button.getAttribute('data-dokumen') || '{}'), DOKUMEN_LABEL);
+            editModal.querySelectorAll('.input-dokumen').forEach(function (i) { i.value = ''; });
         });
 
         // Delete Modal (Hanya untuk Admin)
