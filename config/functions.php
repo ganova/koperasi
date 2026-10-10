@@ -1,6 +1,8 @@
 <?php
 // config/functions.php
 
+require_once __DIR__ . '/../includes/pinjaman_helper.php';
+
 // TAMBAHKAN kondisi cek function untuk semua function
 
 if (!function_exists('formatRupiah')) {
