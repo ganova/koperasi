@@ -42,6 +42,22 @@ $pinjaman_data = $stmt_pinjaman->fetch(PDO::FETCH_ASSOC);
 // Hitung total tagihan aktif (sisa pokok + sisa bunga)
 $total_tagihan_aktif = $pinjaman_data['total_sisa_pokok'] + $pinjaman_data['total_sisa_bunga'];
 
+// Jadwal angsuran pinjaman aktif (bulanan & mingguan), dibaca langsung dari tabel angsuran
+// sehingga pembayaran oleh teller langsung terlihat
+$query_jadwal = "SELECT p.id AS pinjaman_id, p.kode_pinjaman, p.tenor, p.frekuensi, p.jumlah_cicilan,
+                        a.angsuran_ke, a.tanggal_jatuh_tempo, a.jumlah_angsuran, a.tanggal_bayar, a.status
+                 FROM angsuran a
+                 JOIN pinjaman p ON a.pinjaman_id = p.id
+                 WHERE p.anggota_id = :anggota_id AND p.status = 'aktif'
+                 ORDER BY p.tanggal_pencairan, p.id, a.angsuran_ke";
+$stmt_jadwal = $db->prepare($query_jadwal);
+$stmt_jadwal->bindParam(':anggota_id', $anggota_id_db);
+$stmt_jadwal->execute();
+$jadwal_angsuran = [];
+foreach ($stmt_jadwal->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $jadwal_angsuran[$row['pinjaman_id']][] = $row;
+}
+
 // Get total pinjaman yang sudah lunas
 $query_pinjaman_lunas = "SELECT COUNT(*) as total_lunas 
                          FROM pinjaman 
@@ -658,6 +674,66 @@ function formatRupiah($angka) {
                                         Belanja waserda: <?php echo formatRupiah($waserda_total['total_belanja']); ?>
                                     </small>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Jadwal Angsuran Pinjaman Aktif -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-calendar-alt me-2 text-danger"></i>Jadwal Angsuran Pinjaman Aktif
+                                </h6>
+                            </div>
+                            <div class="card-body p-3">
+                                <?php if (empty($jadwal_angsuran)): ?>
+                                    <div class="text-center py-2">
+                                        <i class="fas fa-check-circle fa-2x text-muted mb-2"></i>
+                                        <p class="text-muted mb-0 small">Tidak ada pinjaman aktif</p>
+                                    </div>
+                                <?php else: ?>
+                                    <?php foreach ($jadwal_angsuran as $jadwal): $info = $jadwal[0]; ?>
+                                    <div class="mb-3">
+                                        <div class="small mb-1">
+                                            <strong><?php echo htmlspecialchars($info['kode_pinjaman']); ?></strong>
+                                            <span class="text-muted">&middot; <?php echo labelTenorRow($info); ?></span>
+                                        </div>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-striped mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Ke</th>
+                                                        <th>Jatuh Tempo</th>
+                                                        <th class="text-end">Nominal</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($jadwal as $a):
+                                                        if ($a['status'] == 'lunas') {
+                                                            $status_badge = '<span class="badge bg-success">Lunas</span>';
+                                                        } elseif ($a['status'] == 'telat' || $a['tanggal_jatuh_tempo'] < date('Y-m-d')) {
+                                                            $status_badge = '<span class="badge bg-danger">Terlambat</span>';
+                                                        } else {
+                                                            $status_badge = '<span class="badge bg-secondary">Belum</span>';
+                                                        }
+                                                    ?>
+                                                    <tr>
+                                                        <td><?php echo $a['angsuran_ke']; ?>/<?php echo count($jadwal); ?></td>
+                                                        <td><?php echo date('d/m/Y', strtotime($a['tanggal_jatuh_tempo'])); ?></td>
+                                                        <td class="text-end"><?php echo formatRupiah($a['jumlah_angsuran']); ?></td>
+                                                        <td><?php echo $status_badge; ?></td>
+                                                    </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
