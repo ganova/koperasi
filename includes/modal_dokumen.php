@@ -43,6 +43,9 @@
         Object.keys(labels).forEach(function (field) {
             var box = document.getElementById(prefix + '_preview_' + field);
             if (!box) return;
+            // Dokumen wajib hanya perlu diunggah bila anggota belum punya file-nya
+            var input = box.parentElement.querySelector('.input-dokumen');
+            if (input) input.required = input.getAttribute('data-wajib') === '1' && !docs[field];
             box.innerHTML = '';
             if (docs[field]) {
                 var img = document.createElement('img');

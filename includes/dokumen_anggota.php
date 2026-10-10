@@ -13,7 +13,8 @@
  */
 
 if (!defined('DOKUMEN_ANGGOTA_WAJIB')) {
-    define('DOKUMEN_ANGGOTA_WAJIB', []); // sementara semua opsional (menunggu konfirmasi klien)
+    // Dikonfirmasi klien (Okt 2026): ketiga dokumen wajib. Kosongkan array untuk menjadikan opsional.
+    define('DOKUMEN_ANGGOTA_WAJIB', ['foto_ktp', 'foto_kk', 'foto_ktp_pasangan']);
 }
 if (!defined('DOKUMEN_MAKS_BYTE')) {
     define('DOKUMEN_MAKS_BYTE', 10 * 1024 * 1024);

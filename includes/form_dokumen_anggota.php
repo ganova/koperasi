@@ -21,6 +21,7 @@ $dok_anggota = isset($dok_anggota) ? $dok_anggota : null;
         <input type="file" name="<?php echo $field; ?>" class="form-control form-control-sm input-dokumen"
                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                data-label="<?php echo htmlspecialchars($label); ?>"
+               data-wajib="<?php echo $wajib ? '1' : '0'; ?>"
                <?php echo ($wajib && !$lama) ? 'required' : ''; ?>>
         <div class="preview-dokumen mt-2" id="<?php echo $dok_prefix . '_preview_' . $field; ?>">
             <?php if ($lama): ?>
