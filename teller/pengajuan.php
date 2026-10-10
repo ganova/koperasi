@@ -44,6 +44,11 @@ if ($_POST && isset($_POST['ajukan_pinjaman'])) {
             throw new Exception("Jenis pinjaman tidak valid atau tidak aktif");
         }
         
+        $jumlah_pinjaman = parseRupiah($jumlah_pinjaman);
+        if ($jumlah_pinjaman === false || $jumlah_pinjaman <= 0) {
+            throw new Exception("Jumlah pinjaman harus berupa angka rupiah penuh lebih dari 0");
+        }
+
         // Validate maksimal pinjaman
         if ($jumlah_pinjaman > $jenis_info['maksimal_pinjaman']) {
             throw new Exception("Jumlah pinjaman melebihi batas maksimal. Maksimal: " . formatRupiah($jenis_info['maksimal_pinjaman']));
@@ -310,7 +315,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             <div class="mb-3">
                                                 <label class="form-label">Jumlah Pinjaman (Rp) *</label>
                                                 <input type="number" name="jumlah_pinjaman" class="form-control" 
-                                                       required step="50000" min="0" id="jumlahPinjaman"
+                                                       required step="1" min="1" id="jumlahPinjaman"
                                                        placeholder="Masukkan jumlah pinjaman">
                                                 <small class="text-muted" id="maxInfo"></small>
                                             </div>

@@ -13,6 +13,11 @@ if ($_POST) {
         $deskripsi = $_POST['deskripsi'];
         
         try {
+            $maksimal_pinjaman = parseRupiah($maksimal_pinjaman);
+            if ($maksimal_pinjaman === false) {
+                throw new Exception("Maksimal pinjaman harus berupa angka rupiah penuh (tanpa desimal)");
+            }
+
             // Check if kode jenis already exists
             $check_query = "SELECT id FROM jenis_pinjaman WHERE kode_jenis = :kode_jenis";
             $check_stmt = $db->prepare($check_query);
@@ -57,6 +62,11 @@ if ($_POST) {
         $status = $_POST['status'];
         
         try {
+            $maksimal_pinjaman = parseRupiah($maksimal_pinjaman);
+            if ($maksimal_pinjaman === false) {
+                throw new Exception("Maksimal pinjaman harus berupa angka rupiah penuh (tanpa desimal)");
+            }
+
             // Check if kode jenis already exists (excluding current record)
             $check_query = "SELECT id FROM jenis_pinjaman WHERE kode_jenis = :kode_jenis AND id != :id";
             $check_stmt = $db->prepare($check_query);
@@ -387,7 +397,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                 <div class="mb-3">
                                     <label class="form-label">Maksimal Pinjaman (Rp) *</label>
                                     <input type="number" name="maksimal_pinjaman" class="form-control" 
-                                           required step="1000" min="0" value="1000000">
+                                           required step="1" min="0" value="1000000">
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -446,7 +456,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                 <div class="mb-3">
                                     <label class="form-label">Maksimal Pinjaman (Rp) *</label>
                                     <input type="number" name="maksimal_pinjaman" id="edit_maksimal" 
-                                           class="form-control" required step="1000" min="0">
+                                           class="form-control" required step="1" min="0">
                                 </div>
                             </div>
                             <div class="col-md-6">
