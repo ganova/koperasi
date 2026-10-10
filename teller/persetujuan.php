@@ -361,7 +361,7 @@ try {
     <script>
         // Auto close alerts after 5 seconds
         setTimeout(function() {
-            var alerts = document.querySelectorAll('.alert');
+            var alerts = document.querySelectorAll('.alert-success'); // pesan error tetap tampil sampai ditutup
             alerts.forEach(function(alert) {
                 var bsAlert = new bootstrap.Alert(alert);
                 bsAlert.close();

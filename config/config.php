@@ -24,6 +24,12 @@ require_once 'database.php';
 try {
     $database = new Database();
     $db = $database->getConnection();
+    // Aplikasi ini dibuat untuk MySQL non-strict. MariaDB/MySQL bawaan XAMPP memakai
+    // STRICT_TRANS_TABLES yang membuat sebagian INSERT gagal (tanggal kosong, teks terlalu
+    // panjang) - dan karena PDO dalam mode silent, gagalnya tidak terlihat. Samakan mode per koneksi.
+    if ($db) {
+        $db->exec("SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION'");
+    }
 } catch (Exception $e) {
     die("Database connection failed: " . $e->getMessage());
 }

@@ -34,6 +34,13 @@ Aplikasi koperasi simpan pinjam (PHP + MySQL) dengan 3 level login: Admin, Telle
 6. Pastikan folder `uploads/anggota/` bisa ditulis oleh web server.
 7. Buka `http://localhost/koperasi2/`.
 
+## Jika muncul pesan merah "Database belum di-update"
+
+Berarti langkah 3 (file migrasi) belum dijalankan pada database yang dipakai. Tanpa migrasi,
+muncul error seperti `Undefined index: frekuensi_diizinkan` / `foto_kk` dan dokumen anggota
+tidak tersimpan. Jalankan migrasinya sekali (bisa juga lewat phpMyAdmin → database
+`koperasi_db` → tab **Import** → pilih `database/migrations/2026_10_revisi_koperasi.sql`).
+
 ## Setelah instalasi
 
 - Jenis pinjaman lama (Umum, Pendidikan, Usaha, Mendesak) perlu diisi **tarif bunga flat per tenor** di menu Admin → Jenis Pinjaman sebelum bisa dipakai di form pengajuan.

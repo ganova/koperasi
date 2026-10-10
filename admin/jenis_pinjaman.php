@@ -367,7 +367,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <?php foreach (explode(',', $jenis['frekuensi_diizinkan']) as $f): ?>
+                                                <?php foreach (explode(',', isset($jenis['frekuensi_diizinkan']) ? $jenis['frekuensi_diizinkan'] : 'bulanan') as $f): ?>
                                                     <span class="badge bg-info"><?php echo labelFrekuensi($f); ?></span>
                                                 <?php endforeach; ?>
                                             </td>
@@ -384,7 +384,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                         data-nama="<?php echo $jenis['nama_jenis']; ?>"
                                                         data-maksimal="<?php echo $jenis['maksimal_pinjaman']; ?>"
                                                         data-tarif="<?php echo htmlspecialchars(json_encode((object) $jenis['tarif']), ENT_QUOTES); ?>"
-                                                        data-frekuensi="<?php echo $jenis['frekuensi_diizinkan']; ?>"
+                                                        data-frekuensi="<?php echo isset($jenis['frekuensi_diizinkan']) ? $jenis['frekuensi_diizinkan'] : 'bulanan'; ?>"
                                                         data-deskripsi="<?php echo $jenis['deskripsi']; ?>"
                                                         data-status="<?php echo $jenis['status']; ?>"
                                                         title="Edit">

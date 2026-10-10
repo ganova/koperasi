@@ -37,7 +37,8 @@ if ($_POST && isset($_POST['proses_penarikan'])) {
         $saldo_sesudah = $saldo_sebelum - $jumlah;
         
         // Generate transaction code
-        $kode_transaksi = 'TAR-' . date('YmdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
+        // Maks. 20 karakter (= panjang kolom); format lama 22 karakter ditolak MySQL strict mode
+        $kode_transaksi = 'TAR-' . date('ymdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
         
         // Insert transaction
         $query_transaksi = "INSERT INTO transaksi (kode_transaksi, anggota_id, jenis_simpanan_id, jenis_transaksi, 

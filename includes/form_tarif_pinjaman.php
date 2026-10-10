@@ -22,6 +22,7 @@
 </div>
 <div class="mb-3">
     <label class="form-label d-block">Frekuensi Angsuran yang Diizinkan *</label>
+    <small class="text-muted d-block mb-1">Boleh centang salah satu atau keduanya. Yang dicentang akan bisa dipilih Teller saat membuat pengajuan.</small>
     <div class="form-check form-check-inline">
         <input class="form-check-input" type="checkbox" name="frekuensi[]" value="bulanan" id="<?php echo $tarif_prefix; ?>_frek_bulanan">
         <label class="form-check-label" for="<?php echo $tarif_prefix; ?>_frek_bulanan">Bulanan</label>

@@ -7,6 +7,20 @@
  * sementara simpanan & file dokumennya sudah terlanjur terhapus.
  */
 
+if (!function_exists('tanggalAtauNull')) {
+    /**
+     * Tanggal opsional dari form: kosong/tidak valid -> NULL.
+     * MySQL/MariaDB strict mode (bawaan XAMPP) menolak '' untuk kolom DATE.
+     */
+    function tanggalAtauNull($nilai) {
+        $nilai = trim((string) $nilai);
+        if ($nilai === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $nilai)) {
+            return null;
+        }
+        return $nilai;
+    }
+}
+
 if (!function_exists('riwayatAnggota')) {
     /** @return array label => jumlah baris terkait yang mencegah penghapusan */
     function riwayatAnggota($db, $anggota_id) {
@@ -82,5 +96,25 @@ if (!function_exists('hapusAnggota')) {
         foreach (array_keys(daftarDokumenAnggota()) as $field) {
             hapusFileDokumenAnggota($data[$field]);
         }
+    }
+}
+
+if (!function_exists('migrasiRevisiBelumDijalankan')) {
+    /**
+     * true bila database belum menjalankan database/migrations/2026_10_revisi_koperasi.sql.
+     * Tanpa migrasi, fitur revisi (tarif flat, mingguan, dokumen anggota) tidak berjalan.
+     */
+    function migrasiRevisiBelumDijalankan($db) {
+        static $hasil = null;
+        if ($hasil === null) {
+            $stmt = $db->query("SELECT COUNT(*) FROM information_schema.COLUMNS
+                                WHERE TABLE_SCHEMA = DATABASE() AND (
+                                      (TABLE_NAME = 'jenis_pinjaman' AND COLUMN_NAME = 'frekuensi_diizinkan')
+                                   OR (TABLE_NAME = 'pinjaman' AND COLUMN_NAME = 'skema_bunga')
+                                   OR (TABLE_NAME = 'anggota' AND COLUMN_NAME = 'foto_ktp_pasangan')
+                                   OR (TABLE_NAME = 'jenis_pinjaman_tarif' AND COLUMN_NAME = 'tenor_bulan'))");
+            $hasil = $stmt && (int) $stmt->fetchColumn() < 4;
+        }
+        return $hasil;
     }
 }

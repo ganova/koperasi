@@ -26,7 +26,52 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="modalDokumenAnggota" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-id-card me-2"></i>Dokumen <span id="modalDokumenAnggotaNama"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 text-center" id="modalDokumenAnggotaIsi"></div>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
+    var DOKUMEN_LABEL_SEMUA = <?php echo json_encode(daftarDokumenAnggota()); ?>;
+
+    /** Tampilkan KTP, KK & KTP suami/istri seorang anggota. docs = {field: url} */
+    function lihatDokumenAnggota(nama, docs) {
+        document.getElementById('modalDokumenAnggotaNama').textContent = nama;
+        var isi = document.getElementById('modalDokumenAnggotaIsi');
+        isi.innerHTML = '';
+        Object.keys(DOKUMEN_LABEL_SEMUA).forEach(function (field) {
+            var label = DOKUMEN_LABEL_SEMUA[field];
+            var col = document.createElement('div');
+            col.className = 'col-md-4';
+            if (docs[field]) {
+                var img = document.createElement('img');
+                img.src = docs[field];
+                img.alt = label;
+                img.className = 'img-thumbnail w-100';
+                img.style.cssText = 'height:180px;object-fit:cover;cursor:zoom-in';
+                img.onclick = function () {
+                    bootstrap.Modal.getInstance(document.getElementById('modalDokumenAnggota')).hide();
+                    lihatDokumen(docs[field], label + ' - ' + nama);
+                };
+                col.appendChild(img);
+            } else {
+                col.innerHTML = '<div class="border rounded d-flex align-items-center justify-content-center text-muted" style="height:180px">Belum ada</div>';
+            }
+            col.insertAdjacentHTML('beforeend', '<div class="small mt-1 fw-semibold"></div>');
+            col.lastChild.textContent = label;
+            isi.appendChild(col);
+        });
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDokumenAnggota')).show();
+    }
+
     var DOKUMEN_MAKS_BYTE = <?php echo DOKUMEN_MAKS_BYTE; ?>;
     var DOKUMEN_TIPE = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -43,9 +88,9 @@
         Object.keys(labels).forEach(function (field) {
             var box = document.getElementById(prefix + '_preview_' + field);
             if (!box) return;
-            // Dokumen wajib hanya perlu diunggah bila anggota belum punya file-nya
+            // Saat edit tidak perlu unggah ulang; pilih file hanya untuk mengganti
             var input = box.parentElement.querySelector('.input-dokumen');
-            if (input) input.required = input.getAttribute('data-wajib') === '1' && !docs[field];
+            if (input) input.required = false;
             box.innerHTML = '';
             if (docs[field]) {
                 var img = document.createElement('img');

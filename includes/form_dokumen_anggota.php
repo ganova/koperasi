@@ -17,12 +17,12 @@ $dok_anggota = isset($dok_anggota) ? $dok_anggota : null;
         $lama = $dok_anggota && !empty($dok_anggota[$field]) ? urlDokumenAnggota($dok_anggota[$field]) : '';
     ?>
     <div class="col-md-4 mb-3">
-        <label class="form-label small"><?php echo $label; ?><?php echo $wajib ? ' *' : ''; ?></label>
+        <label class="form-label small"><?php echo $label; ?><?php echo ($wajib && $dok_prefix !== 'edit') ? ' *' : ''; ?></label>
         <input type="file" name="<?php echo $field; ?>" class="form-control form-control-sm input-dokumen"
                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                data-label="<?php echo htmlspecialchars($label); ?>"
                data-wajib="<?php echo $wajib ? '1' : '0'; ?>"
-               <?php echo ($wajib && !$lama) ? 'required' : ''; ?>>
+               <?php echo ($wajib && $dok_prefix !== 'edit') ? 'required' : ''; ?>>
         <div class="preview-dokumen mt-2" id="<?php echo $dok_prefix . '_preview_' . $field; ?>">
             <?php if ($lama): ?>
                 <img src="<?php echo htmlspecialchars($lama); ?>" class="img-thumbnail thumb-dokumen" alt="<?php echo htmlspecialchars($label); ?>"

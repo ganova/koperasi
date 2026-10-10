@@ -12,9 +12,9 @@ if ($_POST) {
         $nama_lengkap = $_POST['nama_lengkap'];
         $alamat = $_POST['alamat'];
         $telepon = $_POST['telepon'];
-        $email = $_POST['email'];
+        $email = isset($_POST['email']) ? $_POST['email'] : ''; // form tambah teller tidak memakai email
         $tempat_lahir = $_POST['tempat_lahir'];
-        $tanggal_lahir = $_POST['tanggal_lahir'];
+        $tanggal_lahir = tanggalAtauNull(isset($_POST['tanggal_lahir']) ? $_POST['tanggal_lahir'] : '');
         $jenis_kelamin = $_POST['jenis_kelamin'];
         $pekerjaan = $_POST['pekerjaan'];
         $ktp = $_POST['ktp'];
@@ -107,9 +107,9 @@ if ($_POST) {
         $nama_lengkap = $_POST['nama_lengkap'];
         $alamat = $_POST['alamat'];
         $telepon = $_POST['telepon'];
-        $email = $_POST['email'];
+        $email = isset($_POST['email']) ? $_POST['email'] : ''; // form tambah teller tidak memakai email
         $tempat_lahir = $_POST['tempat_lahir'];
-        $tanggal_lahir = $_POST['tanggal_lahir'];
+        $tanggal_lahir = tanggalAtauNull(isset($_POST['tanggal_lahir']) ? $_POST['tanggal_lahir'] : '');
         $jenis_kelamin = $_POST['jenis_kelamin'];
         $pekerjaan = $_POST['pekerjaan'];
         $ktp = $_POST['ktp'];
@@ -478,10 +478,13 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             </td>
                                             <td><?php echo $anggota['telepon'] ?: '-'; ?></td>
                                             <td>
-                                                <?php if ($anggota['foto_ktp']): ?>
-                                                    <a href="<?php echo htmlspecialchars(urlDokumenAnggota($anggota['foto_ktp'])); ?>" target="_blank" class="btn btn-sm btn-outline-info">
-                                                        <i class="fas fa-eye"></i> Lihat KTP
-                                                    </a>
+                                                <?php $dok_url = array_filter(array_map('urlDokumenAnggota', array_intersect_key($anggota, daftarDokumenAnggota()))); ?>
+                                                <?php if (!empty($dok_url)): ?>
+                                                    <button type="button" class="btn btn-sm btn-outline-info"
+                                                            onclick="lihatDokumenAnggota(<?php echo htmlspecialchars(json_encode($anggota['nama_lengkap']), ENT_QUOTES); ?>, <?php echo htmlspecialchars(json_encode((object) $dok_url), ENT_QUOTES); ?>)"
+                                                            title="Lihat KTP, KK &amp; KTP suami/istri">
+                                                        <i class="fas fa-eye"></i> Lihat <span class="badge bg-info"><?php echo count($dok_url); ?>/3</span>
+                                                    </button>
                                                 <?php else: ?>
                                                     <span class="text-muted">-</span>
                                                 <?php endif; ?>
@@ -581,10 +584,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                 <div class="mb-3">
                                     <label class="form-label">Telepon</label>
                                     <input type="text" name="telepon" class="form-control" placeholder="08xxxxxxxxxx">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" name="email" class="form-control" placeholder="email@example.com">
                                 </div>
                             </div>
                             <div class="col-md-6">

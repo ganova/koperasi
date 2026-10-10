@@ -33,7 +33,7 @@ if ($_POST) {
         $telepon = $_POST['telepon'] ?? '';
         $email = $_POST['email'] ?? '';
         $tempat_lahir = $_POST['tempat_lahir'] ?? '';
-        $tanggal_lahir = $_POST['tanggal_lahir'] ?? '';
+        $tanggal_lahir = tanggalAtauNull(isset($_POST['tanggal_lahir']) ? $_POST['tanggal_lahir'] : '');
         $jenis_kelamin = $_POST['jenis_kelamin'] ?? 'L';
         $pekerjaan = $_POST['pekerjaan'] ?? '';
         $ktp = $_POST['ktp'] ?? '';
@@ -412,18 +412,11 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                     </div>
 
                                     <div class="row">
-                                        <div class="col-md-6">
+                                        <div class="col-md-12">
                                             <div class="mb-3">
                                                 <label class="form-label">Telepon</label>
                                                 <input type="text" name="telepon" class="form-control" 
                                                        placeholder="Contoh: 081234567890">
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="mb-3">
-                                                <label class="form-label">Email</label>
-                                                <input type="email" name="email" class="form-control" 
-                                                       placeholder="Contoh: email@example.com">
                                             </div>
                                         </div>
                                     </div>

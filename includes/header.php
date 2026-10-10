@@ -89,6 +89,15 @@ try {
     <!-- Tidak ada dropdown user profile -->
 
 </nav>
+<?php if (isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'teller'], true)
+          && function_exists('migrasiRevisiBelumDijalankan') && migrasiRevisiBelumDijalankan($db)): ?>
+<div class="alert alert-danger mb-0 rounded-0 shadow" style="position:fixed;left:0;right:0;bottom:0;z-index:2000;">
+    <i class="fas fa-database me-2"></i>
+    <strong>Database belum di-update.</strong>
+    Jalankan file <code>database/migrations/2026_10_revisi_koperasi.sql</code> sekali (lihat README) &mdash;
+    tanpa ini fitur bunga flat, angsuran mingguan, dan dokumen anggota tidak berjalan.
+</div>
+<?php endif; ?>
 
 <style>
 .navbar {

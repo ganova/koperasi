@@ -10,7 +10,7 @@
     </div>
     <div class="card-body">
         <div class="row g-2 text-center">
-            <?php foreach (daftarDokumenAnggota() as $field => $label): $url = urlDokumenAnggota($member[$field]); ?>
+            <?php foreach (daftarDokumenAnggota() as $field => $label): $url = urlDokumenAnggota(isset($member[$field]) ? $member[$field] : ''); ?>
             <div class="col-4">
                 <?php if ($url): ?>
                     <img src="<?php echo htmlspecialchars($url); ?>" class="img-thumbnail thumb-dokumen w-100" alt="<?php echo htmlspecialchars($label); ?>"

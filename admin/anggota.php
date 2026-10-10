@@ -14,7 +14,7 @@ if ($_POST) {
         $telepon = trim($_POST['telepon']);
         $email = trim($_POST['email']);
         $tempat_lahir = trim($_POST['tempat_lahir']);
-        $tanggal_lahir = $_POST['tanggal_lahir'];
+        $tanggal_lahir = tanggalAtauNull(isset($_POST['tanggal_lahir']) ? $_POST['tanggal_lahir'] : '');
         $jenis_kelamin = $_POST['jenis_kelamin'];
         $pekerjaan = trim($_POST['pekerjaan']);
         $ktp = trim($_POST['ktp']);
@@ -159,7 +159,7 @@ if ($_POST) {
         $telepon = trim($_POST['telepon']);
         $email = trim($_POST['email']);
         $tempat_lahir = trim($_POST['tempat_lahir']);
-        $tanggal_lahir = $_POST['tanggal_lahir'];
+        $tanggal_lahir = tanggalAtauNull(isset($_POST['tanggal_lahir']) ? $_POST['tanggal_lahir'] : '');
         $jenis_kelamin = $_POST['jenis_kelamin'];
         $pekerjaan = trim($_POST['pekerjaan']);
         $ktp = trim($_POST['ktp']);
@@ -884,11 +884,13 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             </td>
                                             <td class="d-none d-sm-table-cell"><?php echo htmlspecialchars($anggota['telepon'] ?: '-'); ?></td>
                                             <td class="mobile-hide">
-                                                <?php if ($anggota['foto_ktp']): ?>
-                                                    <a href="<?php echo htmlspecialchars(urlDokumenAnggota($anggota['foto_ktp'])); ?>" target="_blank" class="btn btn-sm btn-outline-info">
-                                                        <i class="fas fa-eye"></i> 
-                                                        <span class="d-none d-xl-inline">Lihat</span>
-                                                    </a>
+                                                <?php $dok_url = array_filter(array_map('urlDokumenAnggota', array_intersect_key($anggota, daftarDokumenAnggota()))); ?>
+                                                <?php if (!empty($dok_url)): ?>
+                                                    <button type="button" class="btn btn-sm btn-outline-info"
+                                                            onclick="lihatDokumenAnggota(<?php echo htmlspecialchars(json_encode($anggota['nama_lengkap']), ENT_QUOTES); ?>, <?php echo htmlspecialchars(json_encode((object) $dok_url), ENT_QUOTES); ?>)"
+                                                            title="Lihat KTP, KK &amp; KTP suami/istri">
+                                                        <i class="fas fa-eye"></i> <span class="d-none d-xl-inline">Lihat</span> <span class="badge bg-info"><?php echo count($dok_url); ?>/3</span>
+                                                    </button>
                                                 <?php else: ?>
                                                     <span class="text-muted">-</span>
                                                 <?php endif; ?>
@@ -1230,7 +1232,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             }
 
             // Auto-dismiss alerts after 5 seconds
-            var alerts = document.querySelectorAll('.alert');
+            var alerts = document.querySelectorAll('.alert-success'); // pesan error tetap tampil sampai ditutup
             alerts.forEach(function(alert) {
                 setTimeout(function() {
                     var bsAlert = new bootstrap.Alert(alert);

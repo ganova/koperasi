@@ -56,7 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['proses_setoran'])) {
         }
         
         // Generate transaction code
-        $kode_transaksi = 'SET-' . date('YmdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
+        // Maks. 20 karakter (= panjang kolom); format lama 22 karakter ditolak MySQL strict mode
+        $kode_transaksi = 'SET-' . date('ymdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
         
         // Get current balance from transaksi table (lebih akurat)
         $query_saldo = "SELECT COALESCE(SUM(CASE WHEN jenis_transaksi = 'setoran' THEN jumlah ELSE -jumlah END), 0) as saldo 

@@ -8,8 +8,8 @@
  *   diblokir oleh uploads/anggota/.htaccess).
  * - File foto_ktp lama (sebelum revisi) tetap dibaca dari assets/uploads/ktp/.
  *
- * Untuk menjadikan dokumen WAJIB: isi DOKUMEN_ANGGOTA_WAJIB dengan nama field,
- * mis. ['foto_ktp', 'foto_kk']. Form & server otomatis mengikuti.
+ * Dokumen di DOKUMEN_ANGGOTA_WAJIB wajib saat TAMBAH anggota. Saat edit, dokumen
+ * boleh tidak diunggah (file lama tetap dipakai; unggah baru = mengganti).
  */
 
 if (!defined('DOKUMEN_ANGGOTA_WAJIB')) {
@@ -79,7 +79,7 @@ if (!function_exists('validasiDokumenAnggota')) {
     /**
      * Validasi semua file dokumen dari $_FILES SEBELUM data disimpan.
      *
-     * @param array|null $data_lama baris anggota saat edit (untuk cek wajib), null saat tambah
+     * @param array|null $data_lama baris anggota saat edit, null saat tambah (cek wajib hanya saat tambah)
      * @return array field => ['tmp' => path, 'ext' => ekstensi] untuk file yang diunggah
      * @throws Exception bila ada file tidak valid
      */
@@ -92,7 +92,7 @@ if (!function_exists('validasiDokumenAnggota')) {
             $ada_file = $file && $file['error'] !== UPLOAD_ERR_NO_FILE;
 
             if (!$ada_file) {
-                if (dokumenWajib($field) && empty($data_lama[$field])) {
+                if (dokumenWajib($field) && $data_lama === null) {
                     throw new Exception("$label wajib diunggah");
                 }
                 continue;
@@ -155,7 +155,12 @@ if (!function_exists('simpanDokumenAnggota')) {
                 $set[] = "`$field` = ?"; // nama field dari daftarDokumenAnggota(), bukan input pengguna
             }
             $stmt = $db->prepare("UPDATE anggota SET " . implode(', ', $set) . " WHERE id = ?");
-            $stmt->execute(array_merge(array_values($baru), [$anggota_id]));
+            if (!$stmt || !$stmt->execute(array_merge(array_values($baru), [$anggota_id]))) {
+                // Jangan gagal diam-diam (mis. kolom belum ada karena migrasi belum dijalankan)
+                $info = $stmt ? $stmt->errorInfo() : $db->errorInfo();
+                throw new Exception("Dokumen gagal disimpan ke database: " . $info[2]
+                    . (migrasiRevisiBelumDijalankan($db) ? " (database belum di-update, jalankan file migrasi)" : ""));
+            }
         } catch (Exception $e) {
             foreach ($baru as $path) {
                 @unlink(realpath(__DIR__ . '/..') . '/uploads/' . $path);

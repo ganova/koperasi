@@ -68,7 +68,8 @@ if ($_POST && isset($_POST['ajukan_pinjaman'])) {
         }
 
         // Generate kode pengajuan
-        $kode_pengajuan = 'PJG-' . date('YmdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
+        // Maks. 20 karakter (= panjang kolom); format lama 22 karakter ditolak MySQL strict mode
+        $kode_pengajuan = 'PJG-' . date('ymdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
 
         // Insert pengajuan (skema flat)
         $query = "INSERT INTO pengajuan_pinjaman (kode_pengajuan, anggota_id, jenis_pinjaman_id,
