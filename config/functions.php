@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/../includes/pinjaman_helper.php';
 require_once __DIR__ . '/../includes/dokumen_anggota.php';
+require_once __DIR__ . '/../includes/anggota_helper.php';
 
 // TAMBAHKAN kondisi cek function untuk semua function
 

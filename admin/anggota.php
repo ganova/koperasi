@@ -300,48 +300,9 @@ if ($_POST) {
         $id = $_POST['id'];
         
         try {
-            $db->beginTransaction();
-            
-            // Get user_id and foto_ktp before deletion
-            $query_get = "SELECT user_id, foto_ktp, foto_kk, foto_ktp_pasangan FROM anggota WHERE id = :id";
-            $stmt_get = $db->prepare($query_get);
-            $stmt_get->bindParam(':id', $id);
-            $stmt_get->execute();
-            $data = $stmt_get->fetch(PDO::FETCH_ASSOC);
-            
-            if ($data) {
-                // Hapus file dokumen anggota
-                foreach (array_keys(daftarDokumenAnggota()) as $field) {
-                    hapusFileDokumenAnggota($data[$field]);
-                }
-                
-                // Delete simpanan records
-                $query_simpanan = "DELETE FROM simpanan WHERE anggota_id = :id";
-                $stmt_simpanan = $db->prepare($query_simpanan);
-                $stmt_simpanan->bindParam(':id', $id);
-                $stmt_simpanan->execute();
-                
-                // Delete anggota record
-                $query_anggota = "DELETE FROM anggota WHERE id = :id";
-                $stmt_anggota = $db->prepare($query_anggota);
-                $stmt_anggota->bindParam(':id', $id);
-                $stmt_anggota->execute();
-                
-                // Delete user account
-                if ($data['user_id']) {
-                    $query_user = "DELETE FROM users WHERE id = :user_id";
-                    $stmt_user = $db->prepare($query_user);
-                    $stmt_user->bindParam(':user_id', $data['user_id']);
-                    $stmt_user->execute();
-                }
-                
-                $db->commit();
-                $_SESSION['success'] = "Anggota berhasil dihapus";
-            } else {
-                throw new Exception("Data anggota tidak ditemukan");
-            }
+            hapusAnggota($db, $id);
+            $_SESSION['success'] = "Anggota berhasil dihapus";
         } catch (Exception $e) {
-            $db->rollBack();
             $_SESSION['error'] = "Gagal menghapus anggota: " . $e->getMessage();
         }
         
@@ -1214,7 +1175,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                         <p class="fw-bold text-center p-3 bg-light rounded" id="delete_nama"></p>
                         <div class="alert alert-warning mb-0">
                             <i class="fas fa-exclamation-triangle me-2"></i>
-                            Data yang dihapus tidak dapat dikembalikan. Semua data simpanan dan transaksi terkait juga akan dihapus.
+                            Data yang dihapus tidak dapat dikembalikan. Anggota yang sudah memiliki transaksi, simpanan bersaldo, atau pinjaman tidak bisa dihapus &mdash; ubah statusnya menjadi Nonaktif.
                         </div>
                     </div>
                     <div class="modal-footer">
