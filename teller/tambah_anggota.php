@@ -40,14 +40,27 @@ if ($_POST) {
         $rekening_bank = $_POST['rekening_bank'] ?? '';
         $tanggal_daftar = $_POST['tanggal_daftar'];
         $status = $_POST['status'];
-        $user_id = $_SESSION['user_id'];
 
         try {
             $db->beginTransaction();
-            
+
             // Validasi dokumen (finfo, maks. 10 MB) sebelum data disimpan
             $dokumen = validasiDokumenAnggota();
-            
+
+            $check_stmt = $db->prepare("SELECT id FROM users WHERE username = ?");
+            $check_stmt->execute([$kode_anggota]);
+            if ($check_stmt->rowCount() > 0) {
+                throw new Exception("Kode anggota sudah dipakai sebagai username");
+            }
+
+            // Akun login milik anggota sendiri (sebelumnya user_id diisi id teller yang login,
+            // sehingga edit anggota ikut mengubah akun teller). Sama dengan teller/anggota.php.
+            $password = password_hash('123456', PASSWORD_DEFAULT);
+            $stmt_user = $db->prepare("INSERT INTO users (username, password, nama_lengkap, role, status)
+                                       VALUES (?, ?, ?, 'anggota', ?)");
+            $stmt_user->execute([$kode_anggota, $password, $nama_lengkap, $status]);
+            $user_id = $db->lastInsertId();
+
             // Insert data anggota
             $query = "INSERT INTO anggota (kode_anggota, nama_lengkap, alamat, telepon, email, tempat_lahir, tanggal_lahir, jenis_kelamin, pekerjaan, ktp, rekening_bank, tanggal_daftar, status, user_id) 
                      VALUES (:kode_anggota, :nama_lengkap, :alamat, :telepon, :email, :tempat_lahir, :tanggal_lahir, :jenis_kelamin, :pekerjaan, :ktp, :rekening_bank, :tanggal_daftar, :status, :user_id)";
@@ -68,9 +81,16 @@ if ($_POST) {
             $stmt->bindParam(':user_id', $user_id);
             
             if ($stmt->execute()) {
-                simpanDokumenAnggota($db, $db->lastInsertId(), $dokumen);
+                $anggota_id = $db->lastInsertId();
+                simpanDokumenAnggota($db, $anggota_id, $dokumen);
+
+                // Rekening simpanan default (sama dengan teller/anggota.php)
+                $stmt_simpanan = $db->prepare("INSERT INTO simpanan (anggota_id, jenis_simpanan_id, saldo)
+                                               SELECT ?, id, 0 FROM jenis_simpanan WHERE status = 'aktif'");
+                $stmt_simpanan->execute([$anggota_id]);
+
                 $db->commit();
-                $_SESSION['success'] = "Anggota berhasil ditambahkan";
+                $_SESSION['success'] = "Anggota berhasil ditambahkan. Username: " . htmlspecialchars($kode_anggota) . ", password default: 123456";
                 header("Location: tambah_anggota.php");
                 exit();
             } else {
