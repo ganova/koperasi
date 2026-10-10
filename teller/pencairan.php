@@ -37,7 +37,7 @@ if (!$koperasi) {
 // PERBAIKAN: Hanya query untuk view, tidak ada aksi pencairan
 $query = "SELECT pp.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis, 
           jp.maksimal_pinjaman, u.nama_lengkap as admin_name,
-          p.kode_pinjaman, p.tanggal_pencairan, p.status as status_pinjaman
+          p.id as pinjaman_id, p.kode_pinjaman, p.tanggal_pencairan, p.status as status_pinjaman
           FROM pengajuan_pinjaman pp
           JOIN anggota a ON pp.anggota_id = a.id
           JOIN jenis_pinjaman jp ON pp.jenis_pinjaman_id = jp.id
@@ -90,49 +90,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
         .info-alert {
             background-color: #e7f3ff;
             border-left: 4px solid #3498db;
-        }
-        /* Styles untuk slip cetak */
-        .slip-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            border: 2px solid #000;
-            font-family: Arial, sans-serif;
-        }
-        .slip-header {
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-        .slip-detail {
-            margin-bottom: 15px;
-        }
-        .ttd-section {
-            margin-top: 50px;
-            display: flex;
-            justify-content: space-between;
-        }
-        .ttd-box {
-            text-align: center;
-            width: 45%;
-        }
-        .ttd-line {
-            border-top: 1px solid #000;
-            margin-top: 60px;
-            padding-top: 5px;
-        }
-        @media print {
-            .no-print {
-                display: none !important;
-            }
-            .slip-container {
-                border: none;
-                box-shadow: none;
-            }
-            body {
-                background: white !important;
-            }
         }
     </style>
 </head>
@@ -357,13 +314,13 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                 <i class="fas fa-eye"></i>
                                             </button>
                                             
-                                            <!-- Print Slip Button - hanya untuk pinjaman yang sudah dicairkan -->
-                                            <?php if ($pengajuan['status_pinjaman'] == 'aktif'): ?>
-                                            <button class="btn btn-sm btn-success btn-action" 
-                                                    onclick="printSlip(<?php echo htmlspecialchars(json_encode($pengajuan), ENT_QUOTES, 'UTF-8'); ?>)"
-                                                    title="Cetak Slip">
+                                            <!-- Slip pencairan (A5) - hanya untuk pengajuan yang sudah menjadi pinjaman -->
+                                            <?php if (!empty($pengajuan['pinjaman_id'])): ?>
+                                            <a class="btn btn-sm btn-success btn-action" target="_blank" rel="noopener"
+                                               href="cetak_slip_pencairan.php?id=<?php echo (int) $pengajuan['pinjaman_id']; ?>"
+                                               title="Cetak Slip">
                                                 <i class="fas fa-print"></i>
-                                            </button>
+                                            </a>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -529,29 +486,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
         </div>
     </div>
 
-    <!-- Slip Print Modal -->
-    <div class="modal fade" id="slipModal" tabindex="-1">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Slip Pencairan Pinjaman</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="slipContent" class="slip-container">
-                        <!-- Slip content akan diisi oleh JavaScript -->
-                    </div>
-                </div>
-                <div class="modal-footer no-print">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                    <button type="button" class="btn btn-success" onclick="window.print()">
-                        <i class="fas fa-print me-1"></i> Cetak
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Detail Modal
@@ -583,107 +517,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             document.getElementById('detail_tanggal').textContent = button.getAttribute('data-tanggal');
             document.getElementById('detail_catatan').textContent = button.getAttribute('data-catatan') || '-';
         });
-
-        // Print Slip Function - PERBAIKAN: Menggunakan data koperasi dari PHP
-        function printSlip(pengajuan) {
-            const slipContent = document.getElementById('slipContent');
-            
-            // Hitung angsuran per bulan
-            const jumlahPinjaman = parseFloat(pengajuan.jumlah_pinjaman);
-            const bunga = parseFloat(pengajuan.bunga) / 100;
-            const tenor = parseInt(pengajuan.tenor);
-            
-            const bungaPerBulan = (jumlahPinjaman * bunga) / 12;
-            const pokokPerBulan = jumlahPinjaman / tenor;
-            const angsuranPerBulan = pokokPerBulan + bungaPerBulan;
-            const totalPinjaman = jumlahPinjaman + (bungaPerBulan * tenor);
-            
-            // PERBAIKAN: Gunakan data koperasi dari PHP
-            const koperasiNama = '<?php echo addslashes($koperasi["nama"]); ?>';
-            const koperasiAlamat = '<?php echo addslashes($koperasi["alamat"]); ?>';
-            const koperasiTelepon = '<?php echo addslashes($koperasi["telepon"]); ?>';
-            const koperasiEmail = '<?php echo addslashes($koperasi["email"]); ?>';
-            
-            const slipHTML = `
-                <div class="slip-header">
-                    <h2>BUKTI PENCARIAN PINJAMAN</h2>
-                    <h3>${koperasiNama}</h3>
-                    <p>${koperasiAlamat}, Telp: ${koperasiTelepon}, Email: ${koperasiEmail}</p>
-                </div>
-                
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="slip-detail">
-                            <strong>Kode Pinjaman:</strong> ${pengajuan.kode_pinjaman || '-'}
-                        </div>
-                        <div class="slip-detail">
-                            <strong>Kode Pengajuan:</strong> ${pengajuan.kode_pengajuan}
-                        </div>
-                        <div class="slip-detail">
-                            <strong>Nama Anggota:</strong> ${pengajuan.nama_lengkap}
-                        </div>
-                        <div class="slip-detail">
-                            <strong>Kode Anggota:</strong> ${pengajuan.kode_anggota}
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="slip-detail">
-                            <strong>Tanggal Pencairan:</strong> ${pengajuan.tanggal_pencairan ? new Date(pengajuan.tanggal_pencairan).toLocaleDateString('id-ID') : new Date().toLocaleDateString('id-ID')}
-                        </div>
-                        <div class="slip-detail">
-                            <strong>Jenis Pinjaman:</strong> ${pengajuan.nama_jenis}
-                        </div>
-                        <div class="slip-detail">
-                            <strong>Tenor:</strong> ${pengajuan.tenor} bulan
-                        </div>
-                        <div class="slip-detail">
-                            <strong>Bunga:</strong> ${pengajuan.bunga}%
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="slip-detail">
-                    <strong>Jumlah Pinjaman:</strong> Rp ${Number(pengajuan.jumlah_pinjaman).toLocaleString('id-ID')}
-                </div>
-                
-                <div class="slip-detail">
-                    <strong>Angsuran per Bulan:</strong> Rp ${Math.round(angsuranPerBulan).toLocaleString('id-ID')}
-                </div>
-                
-                <div class="slip-detail">
-                    <strong>Total Pinjaman:</strong> Rp ${Math.round(totalPinjaman).toLocaleString('id-ID')}
-                </div>
-                
-                <div class="slip-detail">
-                    <strong>Tujuan Pinjaman:</strong> ${pengajuan.tujuan_pinjaman || '-'}
-                </div>
-                
-                <div class="ttd-section">
-                    <div class="ttd-box">
-                        <div class="ttd-line">
-                            <strong>PENERIMA</strong><br>
-                            ${pengajuan.nama_lengkap}
-                        </div>
-                    </div>
-                    <div class="ttd-box">
-                        <div class="ttd-line">
-                            <strong>TELLER</strong><br>
-                            <?php echo $_SESSION['nama_lengkap']; ?>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="mt-4 text-center">
-                    <small><em>Slip ini sebagai bukti sah pencairan pinjaman</em></small>
-                </div>
-            `;
-            
-            slipContent.innerHTML = slipHTML;
-            
-            // Show modal
-            const slipModal = new bootstrap.Modal(document.getElementById('slipModal'));
-            slipModal.show();
-        }
 
         // Auto close alerts after 5 seconds
         setTimeout(function() {

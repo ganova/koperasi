@@ -357,6 +357,7 @@ function formatRupiah($angka) {
                                             <th>Tenor</th>
                                             <th>Tanggal Cair</th>
                                             <th>Status</th>
+                                            <th>Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -376,6 +377,12 @@ function formatRupiah($angka) {
                                                 <span class="badge bg-<?php echo $p['status'] == 'aktif' ? 'success' : 'secondary'; ?>">
                                                     <?php echo ucfirst($p['status']); ?>
                                                 </span>
+                                            </td>
+                                            <td>
+                                                <a class="btn btn-sm btn-success" target="_blank" rel="noopener"
+                                                   href="cetak_slip_pencairan.php?id=<?php echo (int) $p['id']; ?>" title="Cetak Slip">
+                                                    <i class="fas fa-print"></i>
+                                                </a>
                                             </td>
                                         </tr>
                                         <?php endforeach; ?>
