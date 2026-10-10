@@ -24,8 +24,7 @@ try {
                 a.kode_anggota,
                 a.telepon,
                 jp.nama_jenis,
-                jp.maksimal_pinjaman,
-                jp.bunga
+                jp.maksimal_pinjaman
               FROM pengajuan_pinjaman pp
               JOIN anggota a ON pp.anggota_id = a.id
               JOIN jenis_pinjaman jp ON pp.jenis_pinjaman_id = jp.id
@@ -38,16 +37,10 @@ try {
 
     // Hitung total angsuran
     foreach ($pengajuan_list as &$pengajuan) {
-        $jumlah_pinjaman = $pengajuan['jumlah_pinjaman'];
-        $bunga = $pengajuan['bunga'];
-        $tenor = $pengajuan['tenor'];
-        
-        $bunga_bulanan = $bunga / 100 / 12;
-        $angsuran_per_bulan = $jumlah_pinjaman * $bunga_bulanan * pow(1 + $bunga_bulanan, $tenor) / (pow(1 + $bunga_bulanan, $tenor) - 1);
-        $total_pinjaman = $angsuran_per_bulan * $tenor;
-        
-        $pengajuan['angsuran_per_bulan'] = $angsuran_per_bulan;
-        $pengajuan['total_pinjaman'] = $total_pinjaman;
+        // Rumus dari includes/pinjaman_helper.php (sesuai skema & frekuensi pengajuan)
+        $hitung = hitungDariPinjaman($pengajuan);
+        $pengajuan['angsuran_per_bulan'] = $hitung['angsuran'];
+        $pengajuan['total_pinjaman'] = $hitung['total'];
     }
 
 } catch (Exception $e) {
@@ -266,7 +259,7 @@ try {
                                             <th>Jumlah</th>
                                             <th>Tenor</th>
                                             <th>Bunga</th>
-                                            <th>Angsuran/Bln</th>
+                                            <th>Angsuran</th>
                                             <th>Tanggal Pengajuan</th>
                                             <th>Status</th>
                                         </tr>
@@ -284,12 +277,12 @@ try {
                                             <td><?php echo htmlspecialchars($pengajuan['nama_jenis']); ?></td>
                                             <td class="fw-bold text-primary"><?php echo formatRupiah($pengajuan['jumlah_pinjaman']); ?></td>
                                             <td>
-                                                <span class="badge bg-info"><?php echo $pengajuan['tenor']; ?> bulan</span>
+                                                <span class="badge bg-info"><?php echo labelTenorRow($pengajuan); ?></span>
                                             </td>
                                             <td>
-                                                <span class="badge bg-warning"><?php echo $pengajuan['bunga']; ?>%</span>
+                                                <span class="badge bg-warning"><?php echo labelBungaRow($pengajuan); ?></span>
                                             </td>
-                                            <td class="fw-bold"><?php echo formatRupiah($pengajuan['angsuran_per_bulan']); ?></td>
+                                            <td class="fw-bold"><?php echo formatRupiah($pengajuan['angsuran_per_bulan']); ?><small class="text-muted fw-normal">/<?php echo strtolower(labelPeriode($pengajuan['frekuensi'])); ?></small></td>
                                             <td>
                                                 <small class="text-muted">
                                                     <?php echo date('d/m/Y H:i', strtotime($pengajuan['tanggal_pengajuan'])); ?>

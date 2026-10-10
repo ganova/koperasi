@@ -296,7 +296,7 @@ foreach ($pinjaman as $p) {
     $pdf->Cell(30, 6, formatRupiah($p['sisa_pokok']), 1, 0, 'R');
     $pdf->Cell(30, 6, formatRupiah($p['total_pokok_dibayar']), 1, 0, 'R');
     $pdf->Cell(20, 6, $p['tenor'] . ' bln', 1, 0, 'C');
-    $pdf->Cell(15, 6, $p['bunga'] . '%', 1, 0, 'C');
+    $pdf->Cell(15, 6, labelBungaRow($p), 1, 0, 'C');
     $pdf->Cell(25, 6, date('d/m/Y', strtotime($p['tanggal_pencairan'])), 1, 0, 'C');
     $pdf->Cell(20, 6, ucfirst($p['status']), 1, 1, 'C');
 }

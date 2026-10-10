@@ -57,76 +57,8 @@ if ($_POST) {
                 $pengajuan = $stmt_get->fetch(PDO::FETCH_ASSOC);
                 
                 if ($pengajuan) {
-                    // Generate kode pinjaman
-                    $kode_pinjaman = 'PIN-' . date('YmdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
-                    
-                    // Calculate angsuran details
-                    $jumlah_pinjaman = $pengajuan['jumlah_pinjaman'];
-                    $bunga_per_tahun = $pengajuan['bunga'];
-                    $tenor = $pengajuan['tenor'];
-                    
-                    // Bunga per bulan
-                    $bunga_per_bulan = ($bunga_per_tahun / 100) / 12;
-                    
-                    // Calculate angsuran per bulan (annuity formula)
-                    $angsuran_per_bulan = $jumlah_pinjaman * $bunga_per_bulan * pow(1 + $bunga_per_bulan, $tenor) / (pow(1 + $bunga_per_bulan, $tenor) - 1);
-                    $angsuran_per_bulan = round($angsuran_per_bulan);
-                    
-                    // Total bunga
-                    $total_bunga = ($angsuran_per_bulan * $tenor) - $jumlah_pinjaman;
-                    
-                    // Insert into pinjaman table
-                    $query_pinjaman = "INSERT INTO pinjaman (
-                        kode_pinjaman, anggota_id, jenis_pinjaman_id, jumlah_pinjaman, 
-                        sisa_pokok, tenor, bunga, angsuran_per_bulan, total_bunga,
-                        tanggal_pencairan, jatuh_tempo, status
-                    ) VALUES (
-                        :kode_pinjaman, :anggota_id, :jenis_pinjaman_id, :jumlah_pinjaman,
-                        :sisa_pokok, :tenor, :bunga, :angsuran_per_bulan, :total_bunga,
-                        NOW(), DATE_ADD(NOW(), INTERVAL :tenor_month MONTH), 'aktif'
-                    )";
-                    
-                    $stmt_pinjaman = $db->prepare($query_pinjaman);
-                    $stmt_pinjaman->bindParam(':kode_pinjaman', $kode_pinjaman);
-                    $stmt_pinjaman->bindParam(':anggota_id', $pengajuan['anggota_id']);
-                    $stmt_pinjaman->bindParam(':jenis_pinjaman_id', $pengajuan['jenis_pinjaman_id']);
-                    $stmt_pinjaman->bindParam(':jumlah_pinjaman', $pengajuan['jumlah_pinjaman']);
-                    $stmt_pinjaman->bindParam(':sisa_pokok', $pengajuan['jumlah_pinjaman']);
-                    $stmt_pinjaman->bindParam(':tenor', $tenor);
-                    $stmt_pinjaman->bindParam(':bunga', $pengajuan['bunga']);
-                    $stmt_pinjaman->bindParam(':angsuran_per_bulan', $angsuran_per_bulan);
-                    $stmt_pinjaman->bindParam(':total_bunga', $total_bunga);
-                    $stmt_pinjaman->bindParam(':tenor_month', $tenor);
-                    $stmt_pinjaman->execute();
-                    
-                    $pinjaman_id = $db->lastInsertId();
-                    
-                    // Create angsuran schedule
-                    for ($i = 1; $i <= $tenor; $i++) {
-                        $tanggal_jatuh_tempo = date('Y-m-d', strtotime("+$i months"));
-                        
-                        // Calculate pokok and bunga for each installment
-                        $sisa_pokok = $jumlah_pinjaman - (($i - 1) * ($jumlah_pinjaman / $tenor));
-                        $bunga_angsuran = $sisa_pokok * $bunga_per_bulan;
-                        $pokok_angsuran = $angsuran_per_bulan - $bunga_angsuran;
-                        
-                        $query_angsuran = "INSERT INTO angsuran (
-                            pinjaman_id, angsuran_ke, tanggal_jatuh_tempo, 
-                            pokok, bunga, jumlah_angsuran, status
-                        ) VALUES (
-                            :pinjaman_id, :angsuran_ke, :tanggal_jatuh_tempo,
-                            :pokok, :bunga, :jumlah_angsuran, 'belum_bayar'
-                        )";
-                        
-                        $stmt_angsuran = $db->prepare($query_angsuran);
-                        $stmt_angsuran->bindParam(':pinjaman_id', $pinjaman_id);
-                        $stmt_angsuran->bindParam(':angsuran_ke', $i);
-                        $stmt_angsuran->bindParam(':tanggal_jatuh_tempo', $tanggal_jatuh_tempo);
-                        $stmt_angsuran->bindParam(':pokok', $pokok_angsuran);
-                        $stmt_angsuran->bindParam(':bunga', $bunga_angsuran);
-                        $stmt_angsuran->bindParam(':jumlah_angsuran', $angsuran_per_bulan);
-                        $stmt_angsuran->execute();
-                    }
+                    // Buat pinjaman + jadwal angsuran (rumus & jadwal di includes/pinjaman_helper.php)
+                    buatPinjamanDanJadwal($db, $pengajuan);
                 }
             }
             
@@ -351,10 +283,10 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             <div class="fw-bold text-primary"><?php echo formatRupiah($pengajuan['jumlah_pinjaman']); ?></div>
                                         </td>
                                         <td>
-                                            <span class="badge bg-info"><?php echo $pengajuan['tenor']; ?> bulan</span>
+                                            <span class="badge bg-info"><?php echo labelTenorRow($pengajuan); ?></span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-success"><?php echo $pengajuan['bunga']; ?>%</span>
+                                            <span class="badge bg-success"><?php echo labelBungaRow($pengajuan); ?></span>
                                         </td>
                                         <td>
                                             <small><?php echo $pengajuan['teller_name'] ?? 'System'; ?></small>
@@ -374,7 +306,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                     data-jenis="<?php echo $pengajuan['nama_jenis']; ?>"
                                                     data-jumlah="<?php echo $pengajuan['jumlah_pinjaman']; ?>"
                                                     data-tenor="<?php echo $pengajuan['tenor']; ?>"
-                                                    data-bunga="<?php echo $pengajuan['bunga']; ?>"
+                                                    data-bunga="<?php echo labelBungaRow($pengajuan); ?>"
                                                     data-tujuan="<?php echo $pengajuan['tujuan_pinjaman']; ?>"
                                                     data-status="<?php echo $pengajuan['status']; ?>"
                                                     data-tanggal="<?php echo date('d/m/Y H:i', strtotime($pengajuan['tanggal_pengajuan'])); ?>"
@@ -391,7 +323,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                     data-nama="<?php echo $pengajuan['nama_lengkap']; ?>"
                                                     data-jumlah="<?php echo $pengajuan['jumlah_pinjaman']; ?>"
                                                     data-tenor="<?php echo $pengajuan['tenor']; ?>"
-                                                    data-bunga="<?php echo $pengajuan['bunga']; ?>"
+                                                    data-bunga="<?php echo labelBungaRow($pengajuan); ?>"
                                                     title="Setujui">
                                                 <i class="fas fa-check"></i>
                                             </button>
@@ -586,7 +518,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             document.getElementById('detail_jenis').textContent = button.getAttribute('data-jenis');
             document.getElementById('detail_jumlah').textContent = 'Rp ' + Number(button.getAttribute('data-jumlah')).toLocaleString('id-ID');
             document.getElementById('detail_tenor').textContent = button.getAttribute('data-tenor') + ' bulan';
-            document.getElementById('detail_bunga').textContent = button.getAttribute('data-bunga') + '%';
+            document.getElementById('detail_bunga').textContent = button.getAttribute('data-bunga');
             document.getElementById('detail_teller').textContent = button.getAttribute('data-teller');
             
             var status = button.getAttribute('data-status');

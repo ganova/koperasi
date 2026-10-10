@@ -422,7 +422,7 @@ function formatRupiah($angka) {
                                                         <?php echo $pinjaman['status']; ?>
                                                     </span>
                                                     <small class="<?php echo isset($_GET['pinjaman_id']) && $_GET['pinjaman_id'] == $pinjaman['id'] ? 'text-white' : 'text-muted'; ?>">
-                                                        <?php echo $pinjaman['tenor']; ?> bulan
+                                                        <?php echo labelTenorRow($pinjaman); ?>
                                                     </small>
                                                 </div>
                                             </div>
@@ -494,7 +494,7 @@ function formatRupiah($angka) {
                                         <tbody>
                                             <?php foreach ($angsuran_list as $angsuran): ?>
                                             <tr class="<?php echo $angsuran['tanggal_bayar'] ? 'table-success' : ($angsuran['tanggal_jatuh_tempo'] < date('Y-m-d') ? 'table-danger' : ''); ?>">
-                                                <td><?php echo $angsuran['angsuran_ke']; ?></td>
+                                                <td><?php echo $angsuran['angsuran_ke']; ?><small class="text-muted">/<?php echo count($angsuran_list); ?></small></td>
                                                 <td>
                                                     <small><?php echo date('d/m/Y', strtotime($angsuran['tanggal_jatuh_tempo'])); ?></small>
                                                     <?php if (!$angsuran['tanggal_bayar'] && $angsuran['tanggal_jatuh_tempo'] < date('Y-m-d')): ?>

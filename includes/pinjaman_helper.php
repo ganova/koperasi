@@ -150,6 +150,25 @@ if (!function_exists('labelBunga')) {
     }
 }
 
+if (!function_exists('labelBungaRow')) {
+    /** labelBunga() untuk baris pinjaman/pengajuan; baris tanpa skema dianggap skema lama. */
+    function labelBungaRow($row) {
+        return labelBunga($row['bunga'], isset($row['skema_bunga']) ? $row['skema_bunga'] : 'tahunan');
+    }
+}
+
+if (!function_exists('labelTenorRow')) {
+    /** Contoh: "3 bulan · Mingguan 12×" atau "3 bulan · Bulanan". */
+    function labelTenorRow($row) {
+        $frekuensi = isset($row['frekuensi']) ? $row['frekuensi'] : 'bulanan';
+        $teks = $row['tenor'] . ' bulan · ' . labelFrekuensi($frekuensi);
+        if ($frekuensi === 'mingguan') {
+            $teks .= ' ' . hitungJumlahCicilan($row['tenor'], $frekuensi) . '×';
+        }
+        return $teks;
+    }
+}
+
 if (!function_exists('ringkasanAngsuran')) {
     /** Contoh: "Mingguan — 12× @ Rp 112.500" */
     function ringkasanAngsuran($hitung) {

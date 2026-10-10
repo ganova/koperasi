@@ -2,48 +2,92 @@
 require_once '../includes/auth.php';
 require_once '../config/config.php';
 
+/**
+ * Ambil & validasi field jenis pinjaman dari POST (tarif per tenor + frekuensi).
+ * Validasi yang sama juga dilakukan di JS (form).
+ */
+function ambilInputJenisPinjaman() {
+    $data = [
+        'kode_jenis' => trim($_POST['kode_jenis']),
+        'nama_jenis' => trim($_POST['nama_jenis']),
+        'maksimal_pinjaman' => parseRupiah($_POST['maksimal_pinjaman']),
+        'deskripsi' => isset($_POST['deskripsi']) ? $_POST['deskripsi'] : '',
+    ];
+    if ($data['maksimal_pinjaman'] === false) {
+        throw new Exception("Maksimal pinjaman harus berupa angka rupiah penuh (tanpa desimal)");
+    }
+
+    $frekuensi = isset($_POST['frekuensi']) ? (array) $_POST['frekuensi'] : [];
+    $frekuensi = array_values(array_intersect(['bulanan', 'mingguan'], $frekuensi));
+    if (empty($frekuensi)) {
+        throw new Exception("Pilih minimal satu frekuensi angsuran");
+    }
+    $data['frekuensi_diizinkan'] = implode(',', $frekuensi);
+
+    $tenors = isset($_POST['tarif_tenor']) ? (array) $_POST['tarif_tenor'] : [];
+    $bungas = isset($_POST['tarif_bunga']) ? (array) $_POST['tarif_bunga'] : [];
+    $tarif = [];
+    foreach ($tenors as $i => $tenor) {
+        $tenor = trim($tenor);
+        $bunga = isset($bungas[$i]) ? trim($bungas[$i]) : '';
+        if ($tenor === '' && $bunga === '') {
+            continue;
+        }
+        if (!ctype_digit($tenor) || (int) $tenor < 1 || (int) $tenor > 36) {
+            throw new Exception("Tenor harus bilangan bulat 1–36 bulan");
+        }
+        if (!is_numeric($bunga) || (float) $bunga < 0 || (float) $bunga > BUNGA_MAKS) {
+            throw new Exception("Bunga tenor $tenor bulan harus antara 0 dan " . BUNGA_MAKS . "%");
+        }
+        if (isset($tarif[(int) $tenor])) {
+            throw new Exception("Tenor $tenor bulan diisi lebih dari sekali");
+        }
+        $tarif[(int) $tenor] = round((float) $bunga, 2);
+    }
+    if (empty($tarif)) {
+        throw new Exception("Isi minimal satu tarif bunga per tenor");
+    }
+    ksort($tarif);
+    $data['tarif'] = $tarif;
+    $data['tenor_max'] = max(array_keys($tarif));
+    return $data;
+}
+
+function simpanTarifJenisPinjaman($db, $jenis_id, $tarif) {
+    $db->prepare("DELETE FROM jenis_pinjaman_tarif WHERE jenis_pinjaman_id = ?")->execute([$jenis_id]);
+    $stmt = $db->prepare("INSERT INTO jenis_pinjaman_tarif (jenis_pinjaman_id, tenor_bulan, bunga) VALUES (?, ?, ?)");
+    foreach ($tarif as $tenor => $bunga) {
+        $stmt->execute([$jenis_id, $tenor, $bunga]);
+    }
+}
+
 // Handle form actions
 if ($_POST) {
     if (isset($_POST['add'])) {
-        $kode_jenis = $_POST['kode_jenis'];
-        $nama_jenis = $_POST['nama_jenis'];
-        $maksimal_pinjaman = $_POST['maksimal_pinjaman'];
-        $tenor_max = $_POST['tenor_max'];
-        $bunga = $_POST['bunga'];
-        $deskripsi = $_POST['deskripsi'];
-        
         try {
-            $maksimal_pinjaman = parseRupiah($maksimal_pinjaman);
-            if ($maksimal_pinjaman === false) {
-                throw new Exception("Maksimal pinjaman harus berupa angka rupiah penuh (tanpa desimal)");
-            }
+            $data = ambilInputJenisPinjaman();
 
             // Check if kode jenis already exists
-            $check_query = "SELECT id FROM jenis_pinjaman WHERE kode_jenis = :kode_jenis";
-            $check_stmt = $db->prepare($check_query);
-            $check_stmt->bindParam(':kode_jenis', $kode_jenis);
-            $check_stmt->execute();
-            
+            $check_stmt = $db->prepare("SELECT id FROM jenis_pinjaman WHERE kode_jenis = ?");
+            $check_stmt->execute([$data['kode_jenis']]);
             if ($check_stmt->rowCount() > 0) {
                 throw new Exception("Kode jenis sudah digunakan");
             }
-            
-            $query = "INSERT INTO jenis_pinjaman (kode_jenis, nama_jenis, maksimal_pinjaman, tenor_max, bunga, deskripsi) 
-                      VALUES (:kode_jenis, :nama_jenis, :maksimal_pinjaman, :tenor_max, :bunga, :deskripsi)";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':kode_jenis', $kode_jenis);
-            $stmt->bindParam(':nama_jenis', $nama_jenis);
-            $stmt->bindParam(':maksimal_pinjaman', $maksimal_pinjaman);
-            $stmt->bindParam(':tenor_max', $tenor_max);
-            $stmt->bindParam(':bunga', $bunga);
-            $stmt->bindParam(':deskripsi', $deskripsi);
-            
-            if ($stmt->execute()) {
-                $_SESSION['success'] = "Jenis pinjaman berhasil ditambahkan";
-            } else {
-                throw new Exception("Gagal menambahkan jenis pinjaman");
-            }
+
+            $db->beginTransaction();
+            // Kolom bunga (per tahun) hanya untuk skema lama; jenis baru memakai tarif flat
+            $stmt = $db->prepare("INSERT INTO jenis_pinjaman
+                (kode_jenis, nama_jenis, maksimal_pinjaman, tenor_max, bunga, frekuensi_diizinkan, deskripsi)
+                VALUES (?, ?, ?, ?, 0, ?, ?)");
+            $stmt->execute([$data['kode_jenis'], $data['nama_jenis'], $data['maksimal_pinjaman'],
+                            $data['tenor_max'], $data['frekuensi_diizinkan'], $data['deskripsi']]);
+            simpanTarifJenisPinjaman($db, $db->lastInsertId(), $data['tarif']);
+            $db->commit();
+            $_SESSION['success'] = "Jenis pinjaman berhasil ditambahkan";
         } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
             $_SESSION['error'] = $e->getMessage();
         }
         
@@ -53,50 +97,32 @@ if ($_POST) {
     
     if (isset($_POST['edit'])) {
         $id = $_POST['id'];
-        $kode_jenis = $_POST['kode_jenis'];
-        $nama_jenis = $_POST['nama_jenis'];
-        $maksimal_pinjaman = $_POST['maksimal_pinjaman'];
-        $tenor_max = $_POST['tenor_max'];
-        $bunga = $_POST['bunga'];
-        $deskripsi = $_POST['deskripsi'];
-        $status = $_POST['status'];
+        $status = $_POST['status'] === 'nonaktif' ? 'nonaktif' : 'aktif';
         
         try {
-            $maksimal_pinjaman = parseRupiah($maksimal_pinjaman);
-            if ($maksimal_pinjaman === false) {
-                throw new Exception("Maksimal pinjaman harus berupa angka rupiah penuh (tanpa desimal)");
-            }
+            $data = ambilInputJenisPinjaman();
 
             // Check if kode jenis already exists (excluding current record)
-            $check_query = "SELECT id FROM jenis_pinjaman WHERE kode_jenis = :kode_jenis AND id != :id";
-            $check_stmt = $db->prepare($check_query);
-            $check_stmt->bindParam(':kode_jenis', $kode_jenis);
-            $check_stmt->bindParam(':id', $id);
-            $check_stmt->execute();
-            
+            $check_stmt = $db->prepare("SELECT id FROM jenis_pinjaman WHERE kode_jenis = ? AND id != ?");
+            $check_stmt->execute([$data['kode_jenis'], $id]);
             if ($check_stmt->rowCount() > 0) {
                 throw new Exception("Kode jenis sudah digunakan");
             }
-            
-            $query = "UPDATE jenis_pinjaman SET kode_jenis = :kode_jenis, nama_jenis = :nama_jenis, 
-                      maksimal_pinjaman = :maksimal_pinjaman, tenor_max = :tenor_max, bunga = :bunga, 
-                      deskripsi = :deskripsi, status = :status WHERE id = :id";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':id', $id);
-            $stmt->bindParam(':kode_jenis', $kode_jenis);
-            $stmt->bindParam(':nama_jenis', $nama_jenis);
-            $stmt->bindParam(':maksimal_pinjaman', $maksimal_pinjaman);
-            $stmt->bindParam(':tenor_max', $tenor_max);
-            $stmt->bindParam(':bunga', $bunga);
-            $stmt->bindParam(':deskripsi', $deskripsi);
-            $stmt->bindParam(':status', $status);
-            
-            if ($stmt->execute()) {
-                $_SESSION['success'] = "Jenis pinjaman berhasil diupdate";
-            } else {
-                throw new Exception("Gagal mengupdate jenis pinjaman");
-            }
+
+            // Kolom bunga lama tidak diubah; pinjaman yang sudah ada menyimpan bunganya sendiri
+            $db->beginTransaction();
+            $stmt = $db->prepare("UPDATE jenis_pinjaman SET kode_jenis = ?, nama_jenis = ?,
+                      maksimal_pinjaman = ?, tenor_max = ?, frekuensi_diizinkan = ?,
+                      deskripsi = ?, status = ? WHERE id = ?");
+            $stmt->execute([$data['kode_jenis'], $data['nama_jenis'], $data['maksimal_pinjaman'],
+                            $data['tenor_max'], $data['frekuensi_diizinkan'], $data['deskripsi'], $status, $id]);
+            simpanTarifJenisPinjaman($db, $id, $data['tarif']);
+            $db->commit();
+            $_SESSION['success'] = "Jenis pinjaman berhasil diupdate";
         } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
             $_SESSION['error'] = $e->getMessage();
         }
         
@@ -156,6 +182,10 @@ $query = "SELECT * FROM jenis_pinjaman ORDER BY
 $stmt = $db->prepare($query);
 $stmt->execute();
 $jenis_pinjaman = $stmt->fetchAll(PDO::FETCH_ASSOC);
+foreach ($jenis_pinjaman as &$jp) {
+    $jp['tarif'] = getTarifJenisPinjaman($db, $jp['id']);
+}
+unset($jp);
 
 // Get statistics
 $query_stats = "SELECT 
@@ -295,8 +325,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                         <th>Kode</th>
                                         <th>Nama Jenis</th>
                                         <th>Maksimal Pinjaman</th>
-                                        <th>Tenor Max</th>
-                                        <th>Bunga</th>
+                                        <th>Bunga (flat per tenor)</th>
+                                        <th>Frekuensi</th>
                                         <th>Status</th>
                                         <th>Aksi</th>
                                     </tr>
@@ -327,10 +357,19 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             </td>
                                             <td><?php echo formatRupiah($jenis['maksimal_pinjaman']); ?></td>
                                             <td>
-                                                <span class="badge bg-info"><?php echo $jenis['tenor_max']; ?> bulan</span>
+                                                <?php if (empty($jenis['tarif'])): ?>
+                                                    <span class="badge bg-secondary"><?php echo labelBunga($jenis['bunga'], 'tahunan'); ?> (skema lama)</span>
+                                                    <div><small class="text-danger">Belum ada tarif flat &mdash; tidak muncul di form pengajuan</small></div>
+                                                <?php else: ?>
+                                                    <?php foreach ($jenis['tarif'] as $tenor => $bunga): ?>
+                                                        <span class="badge bg-success mb-1"><?php echo $tenor; ?> bln: <?php echo labelBunga($bunga, 'flat'); ?></span>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
-                                                <span class="badge bg-success"><?php echo $jenis['bunga']; ?>%</span>
+                                                <?php foreach (explode(',', $jenis['frekuensi_diizinkan']) as $f): ?>
+                                                    <span class="badge bg-info"><?php echo labelFrekuensi($f); ?></span>
+                                                <?php endforeach; ?>
                                             </td>
                                             <td>
                                                 <span class="badge bg-<?php echo $jenis['status'] == 'aktif' ? 'success' : 'danger'; ?>">
@@ -344,8 +383,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                         data-kode="<?php echo $jenis['kode_jenis']; ?>"
                                                         data-nama="<?php echo $jenis['nama_jenis']; ?>"
                                                         data-maksimal="<?php echo $jenis['maksimal_pinjaman']; ?>"
-                                                        data-tenor="<?php echo $jenis['tenor_max']; ?>"
-                                                        data-bunga="<?php echo $jenis['bunga']; ?>"
+                                                        data-tarif="<?php echo htmlspecialchars(json_encode((object) $jenis['tarif']), ENT_QUOTES); ?>"
+                                                        data-frekuensi="<?php echo $jenis['frekuensi_diizinkan']; ?>"
                                                         data-deskripsi="<?php echo $jenis['deskripsi']; ?>"
                                                         data-status="<?php echo $jenis['status']; ?>"
                                                         title="Edit">
@@ -371,9 +410,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
 
     <!-- Add Modal -->
     <div class="modal fade" id="addModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <form method="POST">
+                <form method="POST" class="form-jenis-pinjaman">
                     <div class="modal-header">
                         <h5 class="modal-title">
                             <i class="fas fa-plus-circle text-primary me-2"></i>Tambah Jenis Pinjaman
@@ -392,27 +431,12 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                             <input type="text" name="nama_jenis" class="form-control" required 
                                    placeholder="Contoh: Pinjaman Umum">
                         </div>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Maksimal Pinjaman (Rp) *</label>
-                                    <input type="number" name="maksimal_pinjaman" class="form-control" 
-                                           required step="1" min="0" value="1000000">
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Tenor Maksimal (Bulan) *</label>
-                                    <input type="number" name="tenor_max" class="form-control" 
-                                           required min="1" max="36" value="12">
-                                </div>
-                            </div>
-                        </div>
                         <div class="mb-3">
-                            <label class="form-label">Bunga per Tahun (%) *</label>
-                            <input type="number" name="bunga" class="form-control" 
-                                   required step="0.01" min="0" max="100" value="12.0">
+                            <label class="form-label">Maksimal Pinjaman (Rp) *</label>
+                            <input type="number" name="maksimal_pinjaman" class="form-control"
+                                   required step="1" min="0" value="1000000">
                         </div>
+                        <?php $tarif_prefix = 'add'; include __DIR__ . '/../includes/form_tarif_pinjaman.php'; ?>
                         <div class="mb-3">
                             <label class="form-label">Deskripsi</label>
                             <textarea name="deskripsi" class="form-control" rows="3" 
@@ -432,9 +456,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
 
     <!-- Edit Modal -->
     <div class="modal fade" id="editModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <form method="POST">
+                <form method="POST" class="form-jenis-pinjaman">
                     <div class="modal-header">
                         <h5 class="modal-title">
                             <i class="fas fa-edit text-warning me-2"></i>Edit Jenis Pinjaman
@@ -451,27 +475,12 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                             <label class="form-label">Nama Jenis *</label>
                             <input type="text" name="nama_jenis" id="edit_nama" class="form-control" required>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Maksimal Pinjaman (Rp) *</label>
-                                    <input type="number" name="maksimal_pinjaman" id="edit_maksimal" 
-                                           class="form-control" required step="1" min="0">
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Tenor Maksimal (Bulan) *</label>
-                                    <input type="number" name="tenor_max" id="edit_tenor" 
-                                           class="form-control" required min="1" max="36">
-                                </div>
-                            </div>
-                        </div>
                         <div class="mb-3">
-                            <label class="form-label">Bunga per Tahun (%) *</label>
-                            <input type="number" name="bunga" id="edit_bunga" 
-                                   class="form-control" required step="0.01" min="0" max="100">
+                            <label class="form-label">Maksimal Pinjaman (Rp) *</label>
+                            <input type="number" name="maksimal_pinjaman" id="edit_maksimal"
+                                   class="form-control" required step="1" min="0">
                         </div>
+                        <?php $tarif_prefix = 'edit'; include __DIR__ . '/../includes/form_tarif_pinjaman.php'; ?>
                         <div class="mb-3">
                             <label class="form-label">Deskripsi</label>
                             <textarea name="deskripsi" id="edit_deskripsi" class="form-control" rows="3"></textarea>
@@ -531,6 +540,67 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // ---- Tarif bunga flat per tenor (form tambah & edit) ----
+        var BUNGA_MAKS = <?php echo BUNGA_MAKS; ?>;
+
+        function tambahBarisTarif(prefix, tenor, bunga) {
+            var tbody = document.getElementById(prefix + '_tarif_rows');
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td><div class="input-group input-group-sm"><input type="number" name="tarif_tenor[]" class="form-control" required min="1" max="36" step="1"><span class="input-group-text">bulan</span></div></td>' +
+                '<td><div class="input-group input-group-sm"><input type="number" name="tarif_bunga[]" class="form-control" required min="0" max="' + BUNGA_MAKS + '" step="0.01"><span class="input-group-text">%</span></div></td>' +
+                '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="hapusBarisTarif(this)" title="Hapus"><i class="fas fa-times"></i></button></td>';
+            tr.querySelector('input[name="tarif_tenor[]"]').value = tenor || '';
+            tr.querySelector('input[name="tarif_bunga[]"]').value = (bunga !== undefined) ? bunga : '';
+            tbody.appendChild(tr);
+        }
+
+        function hapusBarisTarif(btn) {
+            var tbody = btn.closest('tbody');
+            if (tbody.rows.length > 1) {
+                btn.closest('tr').remove();
+            }
+        }
+
+        function isiFormTarif(prefix, tarif, frekuensi) {
+            var tbody = document.getElementById(prefix + '_tarif_rows');
+            tbody.innerHTML = '';
+            var tenors = Object.keys(tarif);
+            if (tenors.length === 0) {
+                tambahBarisTarif(prefix);
+            }
+            tenors.forEach(function (t) { tambahBarisTarif(prefix, t, tarif[t]); });
+            document.getElementById(prefix + '_frek_bulanan').checked = frekuensi.indexOf('bulanan') !== -1;
+            document.getElementById(prefix + '_frek_mingguan').checked = frekuensi.indexOf('mingguan') !== -1;
+        }
+
+        // Validasi sisi klien (server memvalidasi ulang): min. 1 frekuensi, tenor tidak dobel
+        function validasiFormTarif(form) {
+            if (form.querySelectorAll('input[name="frekuensi[]"]:checked').length === 0) {
+                alert('Pilih minimal satu frekuensi angsuran.');
+                return false;
+            }
+            var seen = {};
+            var tenors = form.querySelectorAll('input[name="tarif_tenor[]"]');
+            for (var i = 0; i < tenors.length; i++) {
+                if (seen[tenors[i].value]) {
+                    alert('Tenor ' + tenors[i].value + ' bulan diisi lebih dari sekali.');
+                    return false;
+                }
+                seen[tenors[i].value] = true;
+            }
+            return true;
+        }
+
+        document.querySelectorAll('form.form-jenis-pinjaman').forEach(function (form) {
+            form.addEventListener('submit', function (e) {
+                if (!validasiFormTarif(form)) {
+                    e.preventDefault();
+                }
+            });
+        });
+        isiFormTarif('add', {}, ['bulanan']);
+
         // Edit Modal handler
         var editModal = document.getElementById('editModal');
         if (editModal) {
@@ -540,8 +610,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                 document.getElementById('edit_kode').value = button.getAttribute('data-kode');
                 document.getElementById('edit_nama').value = button.getAttribute('data-nama');
                 document.getElementById('edit_maksimal').value = button.getAttribute('data-maksimal');
-                document.getElementById('edit_tenor').value = button.getAttribute('data-tenor');
-                document.getElementById('edit_bunga').value = button.getAttribute('data-bunga');
+                isiFormTarif('edit', JSON.parse(button.getAttribute('data-tarif') || '{}'),
+                             (button.getAttribute('data-frekuensi') || 'bulanan').split(','));
                 document.getElementById('edit_deskripsi').value = button.getAttribute('data-deskripsi');
                 document.getElementById('edit_status').value = button.getAttribute('data-status');
             });

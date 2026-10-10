@@ -296,10 +296,10 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             <div class="fw-bold text-primary"><?php echo formatRupiah($pengajuan['jumlah_pinjaman']); ?></div>
                                         </td>
                                         <td>
-                                            <span class="badge bg-info"><?php echo $pengajuan['tenor']; ?> bulan</span>
+                                            <span class="badge bg-info"><?php echo labelTenorRow($pengajuan); ?></span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-success"><?php echo $pengajuan['bunga']; ?>%</span>
+                                            <span class="badge bg-success"><?php echo labelBungaRow($pengajuan); ?></span>
                                         </td>
                                         <td>
                                             <?php
@@ -345,7 +345,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                     data-jenis="<?php echo $pengajuan['nama_jenis']; ?>"
                                                     data-jumlah="<?php echo $pengajuan['jumlah_pinjaman']; ?>"
                                                     data-tenor="<?php echo $pengajuan['tenor']; ?>"
-                                                    data-bunga="<?php echo $pengajuan['bunga']; ?>"
+                                                    data-bunga="<?php echo labelBungaRow($pengajuan); ?>"
                                                     data-tujuan="<?php echo $pengajuan['tujuan_pinjaman']; ?>"
                                                     data-status="<?php echo $status; ?>"
                                                     data-tanggal="<?php echo $pengajuan['tanggal_persetujuan'] ? date('d/m/Y H:i', strtotime($pengajuan['tanggal_persetujuan'])) : '-'; ?>"
@@ -565,7 +565,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             document.getElementById('detail_jenis').textContent = button.getAttribute('data-jenis');
             document.getElementById('detail_jumlah').textContent = 'Rp ' + Number(button.getAttribute('data-jumlah')).toLocaleString('id-ID');
             document.getElementById('detail_tenor').textContent = button.getAttribute('data-tenor') + ' bulan';
-            document.getElementById('detail_bunga').textContent = button.getAttribute('data-bunga') + '%';
+            document.getElementById('detail_bunga').textContent = button.getAttribute('data-bunga');
             document.getElementById('detail_admin').textContent = button.getAttribute('data-admin');
             document.getElementById('detail_tanggal_pencairan').textContent = button.getAttribute('data-tanggal_pencairan');
             

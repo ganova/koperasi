@@ -35,55 +35,8 @@ if ($_POST) {
                 $pengajuan = $stmt_get->fetch(PDO::FETCH_ASSOC);
                 
                 if ($pengajuan) {
-                    // Generate kode pinjaman
-                    $kode_pinjaman = 'PJN-' . date('Ymd') . '-' . str_pad($id, 4, '0', STR_PAD_LEFT);
-                    
-                    // Calculate total pinjaman and angsuran
-                    $total_pinjaman = $pengajuan['jumlah_pinjaman'] * (1 + ($pengajuan['bunga'] / 100) * ($pengajuan['tenor'] / 12));
-                    $angsuran_per_bulan = $total_pinjaman / $pengajuan['tenor'];
-                    
-                    // Insert into pinjaman table
-                    $query_pinjaman = "INSERT INTO pinjaman (pengajuan_id, kode_pinjaman, anggota_id, 
-                                     jenis_pinjaman_id, jumlah_pinjaman, sisa_pokok, tenor, bunga, 
-                                     total_pinjaman, angsuran_per_bulan, tanggal_pencairan, jatuh_tempo) 
-                                     VALUES (:pengajuan_id, :kode_pinjaman, :anggota_id, :jenis_pinjaman_id, 
-                                     :jumlah_pinjaman, :sisa_pokok, :tenor, :bunga, :total_pinjaman, 
-                                     :angsuran_per_bulan, CURDATE(), DATE_ADD(CURDATE(), INTERVAL :tenor MONTH))";
-                    $stmt_pinjaman = $db->prepare($query_pinjaman);
-                    $stmt_pinjaman->bindParam(':pengajuan_id', $id);
-                    $stmt_pinjaman->bindParam(':kode_pinjaman', $kode_pinjaman);
-                    $stmt_pinjaman->bindParam(':anggota_id', $pengajuan['anggota_id']);
-                    $stmt_pinjaman->bindParam(':jenis_pinjaman_id', $pengajuan['jenis_pinjaman_id']);
-                    $stmt_pinjaman->bindParam(':jumlah_pinjaman', $pengajuan['jumlah_pinjaman']);
-                    $stmt_pinjaman->bindParam(':sisa_pokok', $pengajuan['jumlah_pinjaman']);
-                    $stmt_pinjaman->bindParam(':tenor', $pengajuan['tenor']);
-                    $stmt_pinjaman->bindParam(':bunga', $pengajuan['bunga']);
-                    $stmt_pinjaman->bindParam(':total_pinjaman', $total_pinjaman);
-                    $stmt_pinjaman->bindParam(':angsuran_per_bulan', $angsuran_per_bulan);
-                    $stmt_pinjaman->execute();
-                    
-                    $pinjaman_id = $db->lastInsertId();
-                    
-                    // Create angsuran schedule
-                    for ($i = 1; $i <= $pengajuan['tenor']; $i++) {
-                        $tanggal_jatuh_tempo = date('Y-m-d', strtotime("+$i months"));
-                        
-                        $pokok_per_bulan = $pengajuan['jumlah_pinjaman'] / $pengajuan['tenor'];
-                        $bunga_per_bulan = ($pengajuan['jumlah_pinjaman'] * ($pengajuan['bunga'] / 100)) / 12;
-                        
-                        $query_angsuran = "INSERT INTO angsuran (pinjaman_id, angsuran_ke, jumlah_angsuran, 
-                                          pokok, bunga, tanggal_jatuh_tempo) 
-                                          VALUES (:pinjaman_id, :angsuran_ke, :jumlah_angsuran, 
-                                          :pokok, :bunga, :tanggal_jatuh_tempo)";
-                        $stmt_angsuran = $db->prepare($query_angsuran);
-                        $stmt_angsuran->bindParam(':pinjaman_id', $pinjaman_id);
-                        $stmt_angsuran->bindParam(':angsuran_ke', $i);
-                        $stmt_angsuran->bindParam(':jumlah_angsuran', $angsuran_per_bulan);
-                        $stmt_angsuran->bindParam(':pokok', $pokok_per_bulan);
-                        $stmt_angsuran->bindParam(':bunga', $bunga_per_bulan);
-                        $stmt_angsuran->bindParam(':tanggal_jatuh_tempo', $tanggal_jatuh_tempo);
-                        $stmt_angsuran->execute();
-                    }
+                    // Buat pinjaman + jadwal angsuran (rumus & jadwal di includes/pinjaman_helper.php)
+                    buatPinjamanDanJadwal($db, $pengajuan);
                     
                     $db->commit();
                     $_SESSION['success'] = "Pengajuan pinjaman berhasil disetujui dan pinjaman telah dibuat";
@@ -395,10 +348,10 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             <div class="fw-bold text-primary"><?php echo formatRupiah($pengajuan['jumlah_pinjaman']); ?></div>
                                         </td>
                                         <td>
-                                            <span class="badge bg-info"><?php echo $pengajuan['tenor']; ?> bulan</span>
+                                            <span class="badge bg-info"><?php echo labelTenorRow($pengajuan); ?></span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-success"><?php echo $pengajuan['bunga']; ?>%</span>
+                                            <span class="badge bg-success"><?php echo labelBungaRow($pengajuan); ?></span>
                                         </td>
                                         <td>
                                             <?php
@@ -431,7 +384,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                     data-jenis="<?php echo $pengajuan['nama_jenis']; ?>"
                                                     data-jumlah="<?php echo $pengajuan['jumlah_pinjaman']; ?>"
                                                     data-tenor="<?php echo $pengajuan['tenor']; ?>"
-                                                    data-bunga="<?php echo $pengajuan['bunga']; ?>"
+                                                    data-bunga="<?php echo labelBungaRow($pengajuan); ?>"
                                                     data-tujuan="<?php echo $pengajuan['tujuan_pinjaman']; ?>"
                                                     data-status="<?php echo $pengajuan['status']; ?>"
                                                     data-tanggal="<?php echo date('d/m/Y H:i', strtotime($pengajuan['tanggal_pengajuan'])); ?>"
@@ -676,7 +629,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             document.getElementById('detail_jenis').textContent = button.getAttribute('data-jenis');
             document.getElementById('detail_jumlah').textContent = 'Rp ' + Number(button.getAttribute('data-jumlah')).toLocaleString('id-ID');
             document.getElementById('detail_tenor').textContent = button.getAttribute('data-tenor') + ' bulan';
-            document.getElementById('detail_bunga').textContent = button.getAttribute('data-bunga') + '%';
+            document.getElementById('detail_bunga').textContent = button.getAttribute('data-bunga');
             
             var status = button.getAttribute('data-status');
             var statusClass = {

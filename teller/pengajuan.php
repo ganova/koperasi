@@ -26,15 +26,16 @@ if ($_POST && isset($_POST['ajukan_pinjaman'])) {
     $anggota_id = $_POST['anggota_id'];
     $jenis_pinjaman_id = $_POST['jenis_pinjaman_id'];
     $jumlah_pinjaman = $_POST['jumlah_pinjaman'];
-    $tenor = $_POST['tenor'];
+    $tenor = (int) $_POST['tenor'];
+    $frekuensi = isset($_POST['frekuensi']) ? $_POST['frekuensi'] : '';
     $tujuan_pinjaman = $_POST['tujuan_pinjaman'];
     $user_id = $_SESSION['user_id'];
-    
+
     try {
         $db->beginTransaction();
-        
+
         // Get jenis pinjaman info for validation
-        $query_jenis = "SELECT maksimal_pinjaman, tenor_max, bunga FROM jenis_pinjaman WHERE id = :jenis_id AND status = 'aktif'";
+        $query_jenis = "SELECT maksimal_pinjaman, tenor_max, frekuensi_diizinkan FROM jenis_pinjaman WHERE id = :jenis_id AND status = 'aktif'";
         $stmt_jenis = $db->prepare($query_jenis);
         $stmt_jenis->bindParam(':jenis_id', $jenis_pinjaman_id);
         $stmt_jenis->execute();
@@ -54,26 +55,34 @@ if ($_POST && isset($_POST['ajukan_pinjaman'])) {
             throw new Exception("Jumlah pinjaman melebihi batas maksimal. Maksimal: " . formatRupiah($jenis_info['maksimal_pinjaman']));
         }
         
-        // Validate tenor
-        if ($tenor > $jenis_info['tenor_max']) {
-            throw new Exception("Tenor melebihi batas maksimal. Maksimal: " . $jenis_info['tenor_max'] . " bulan");
+        // Validate tenor & bunga: hanya tenor yang punya tarif flat di jenis pinjaman ini
+        $tarif = getTarifJenisPinjaman($db, $jenis_pinjaman_id);
+        if (!isset($tarif[$tenor])) {
+            throw new Exception("Tenor $tenor bulan tidak tersedia untuk jenis pinjaman ini");
         }
-        
+        $bunga = $tarif[$tenor];
+
+        // Validate frekuensi
+        if (!in_array($frekuensi, explode(',', $jenis_info['frekuensi_diizinkan']), true)) {
+            throw new Exception("Frekuensi angsuran tidak diizinkan untuk jenis pinjaman ini");
+        }
+
         // Generate kode pengajuan
         $kode_pengajuan = 'PJG-' . date('YmdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
-        
-        // Insert pengajuan
-        $query = "INSERT INTO pengajuan_pinjaman (kode_pengajuan, anggota_id, jenis_pinjaman_id, 
-                  jumlah_pinjaman, tenor, bunga, tujuan_pinjaman, user_id) 
-                  VALUES (:kode_pengajuan, :anggota_id, :jenis_pinjaman_id, 
-                  :jumlah_pinjaman, :tenor, :bunga, :tujuan_pinjaman, :user_id)";
+
+        // Insert pengajuan (skema flat)
+        $query = "INSERT INTO pengajuan_pinjaman (kode_pengajuan, anggota_id, jenis_pinjaman_id,
+                  jumlah_pinjaman, tenor, bunga, skema_bunga, frekuensi, tujuan_pinjaman, user_id)
+                  VALUES (:kode_pengajuan, :anggota_id, :jenis_pinjaman_id,
+                  :jumlah_pinjaman, :tenor, :bunga, 'flat', :frekuensi, :tujuan_pinjaman, :user_id)";
         $stmt = $db->prepare($query);
         $stmt->bindParam(':kode_pengajuan', $kode_pengajuan);
         $stmt->bindParam(':anggota_id', $anggota_id);
         $stmt->bindParam(':jenis_pinjaman_id', $jenis_pinjaman_id);
         $stmt->bindParam(':jumlah_pinjaman', $jumlah_pinjaman);
         $stmt->bindParam(':tenor', $tenor);
-        $stmt->bindParam(':bunga', $jenis_info['bunga']);
+        $stmt->bindParam(':bunga', $bunga);
+        $stmt->bindParam(':frekuensi', $frekuensi);
         $stmt->bindParam(':tujuan_pinjaman', $tujuan_pinjaman);
         $stmt->bindParam(':user_id', $user_id);
         $stmt->execute();
@@ -97,7 +106,14 @@ $anggota_list = $stmt_anggota->fetchAll(PDO::FETCH_ASSOC);
 $query_jenis = "SELECT * FROM jenis_pinjaman WHERE status = 'aktif' ORDER BY nama_jenis";
 $stmt_jenis = $db->prepare($query_jenis);
 $stmt_jenis->execute();
-$jenis_pinjaman = $stmt_jenis->fetchAll(PDO::FETCH_ASSOC);
+$jenis_pinjaman = [];
+foreach ($stmt_jenis->fetchAll(PDO::FETCH_ASSOC) as $jenis) {
+    // Jenis tanpa tarif flat (skema lama) tidak bisa diajukan sampai Admin mengisi tarifnya
+    $jenis['tarif'] = getTarifJenisPinjaman($db, $jenis['id']);
+    if (!empty($jenis['tarif'])) {
+        $jenis_pinjaman[] = $jenis;
+    }
+}
 
 // Get pengajuan yang dibuat oleh teller ini
 $query_pengajuan = "SELECT 
@@ -300,11 +316,11 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             <?php foreach ($jenis_pinjaman as $jenis): ?>
                                             <option value="<?php echo $jenis['id']; ?>" 
                                                     data-maksimal="<?php echo $jenis['maksimal_pinjaman']; ?>"
-                                                    data-tenor="<?php echo $jenis['tenor_max']; ?>"
-                                                    data-bunga="<?php echo $jenis['bunga']; ?>">
+                                                    data-tarif="<?php echo htmlspecialchars(json_encode((object) $jenis['tarif']), ENT_QUOTES); ?>"
+                                                    data-frekuensi="<?php echo $jenis['frekuensi_diizinkan']; ?>">
                                                 <?php echo $jenis['nama_jenis']; ?>
-                                                (Maks: <?php echo formatRupiah($jenis['maksimal_pinjaman']); ?> | 
-                                                Tenor: <?php echo $jenis['tenor_max']; ?> bln)
+                                                (Maks: <?php echo formatRupiah($jenis['maksimal_pinjaman']); ?> |
+                                                Tenor: <?php echo implode('/', array_keys($jenis['tarif'])); ?> bln)
                                             </option>
                                             <?php endforeach; ?>
                                         </select>
@@ -324,13 +340,22 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             <div class="mb-3">
                                                 <label class="form-label">Tenor (Bulan) *</label>
                                                 <select name="tenor" class="form-select" required id="tenorSelect">
-                                                    <option value="">-- Pilih Tenor --</option>
-                                                    <?php for ($i = 1; $i <= 36; $i++): ?>
-                                                    <option value="<?php echo $i; ?>"><?php echo $i; ?> bulan</option>
-                                                    <?php endfor; ?>
+                                                    <option value="">-- Pilih jenis pinjaman dulu --</option>
                                                 </select>
                                                 <small class="text-muted" id="tenorInfo"></small>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label d-block">Frekuensi Angsuran *</label>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="frekuensi" id="frekBulanan" value="bulanan" required>
+                                            <label class="form-check-label" for="frekBulanan">Bulanan</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="frekuensi" id="frekMingguan" value="mingguan" required>
+                                            <label class="form-check-label" for="frekMingguan">Mingguan</label>
                                         </div>
                                     </div>
                                     
@@ -345,7 +370,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                         <h6 class="text-white mb-3">Perhitungan Pinjaman</h6>
                                         <div class="row text-center">
                                             <div class="col-4">
-                                                <small>Bunga</small>
+                                                <small>Bunga (flat)</small>
                                                 <div class="h5 fw-bold" id="displayBunga">0%</div>
                                             </div>
                                             <div class="col-4">
@@ -353,8 +378,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                 <div class="h5 fw-bold" id="displayTotal">Rp 0</div>
                                             </div>
                                             <div class="col-4">
-                                                <small>Angsuran/Bulan</small>
+                                                <small id="labelAngsuran">Angsuran/Bulan</small>
                                                 <div class="h5 fw-bold" id="displayAngsuran">Rp 0</div>
+                                                <small id="displayCicilan"></small>
                                             </div>
                                         </div>
                                     </div>
@@ -460,8 +486,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                             data-kode_anggota="<?php echo $pengajuan['kode_anggota']; ?>"
                                                             data-jenis="<?php echo $pengajuan['nama_jenis']; ?>"
                                                             data-jumlah="<?php echo $pengajuan['jumlah_pinjaman']; ?>"
-                                                            data-tenor="<?php echo $pengajuan['tenor']; ?>"
-                                                            data-bunga="<?php echo $pengajuan['bunga']; ?>"
+                                                            data-tenor="<?php echo $pengajuan['tenor'] . ' bulan, ' . ringkasanAngsuran(hitungDariPinjaman($pengajuan)); ?>"
+                                                            data-bunga="<?php echo labelBunga($pengajuan['bunga'], $pengajuan['skema_bunga']); ?>"
                                                             data-tujuan="<?php echo $pengajuan['tujuan_pinjaman']; ?>"
                                                             data-status="<?php echo $pengajuan['status']; ?>"
                                                             data-tanggal="<?php echo date('d/m/Y H:i', strtotime($pengajuan['tanggal_pengajuan'])); ?>"
@@ -582,46 +608,78 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/pinjaman.js"></script>
     <script>
-        // Update informasi jenis pinjaman
+        function getTarifTerpilih() {
+            const opt = document.getElementById('jenisPinjamanSelect').selectedOptions[0];
+            return opt && opt.value ? JSON.parse(opt.getAttribute('data-tarif') || '{}') : {};
+        }
+
+        function getFrekuensiTerpilih() {
+            const r = document.querySelector('input[name="frekuensi"]:checked');
+            return r ? r.value : '';
+        }
+
+        // Update informasi jenis pinjaman: tenor dari tarif, frekuensi yang diizinkan
         document.getElementById('jenisPinjamanSelect').addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
-            const maksimal = selectedOption.getAttribute('data-maksimal');
-            const tenorMax = selectedOption.getAttribute('data-tenor');
-            const bunga = selectedOption.getAttribute('data-bunga');
-            
-            document.getElementById('maxInfo').textContent = 'Maksimal: Rp ' + parseInt(maksimal).toLocaleString('id-ID');
-            document.getElementById('tenorInfo').textContent = 'Maksimal tenor: ' + tenorMax + ' bulan';
-            
-            // Update tenor options
             const tenorSelect = document.getElementById('tenorSelect');
             tenorSelect.innerHTML = '<option value="">-- Pilih Tenor --</option>';
-            for (let i = 1; i <= parseInt(tenorMax); i++) {
-                tenorSelect.innerHTML += `<option value="${i}">${i} bulan</option>`;
+            if (!selectedOption.value) {
+                updateCalculation();
+                return;
             }
-            
+            const maksimal = selectedOption.getAttribute('data-maksimal');
+            const tarif = getTarifTerpilih();
+            const frekuensi = (selectedOption.getAttribute('data-frekuensi') || 'bulanan').split(',');
+
+            document.getElementById('maxInfo').textContent = 'Maksimal: Rp ' + parseInt(maksimal).toLocaleString('id-ID');
+            document.getElementById('tenorInfo').textContent = 'Tenor tersedia: ' + Object.keys(tarif).join(', ') + ' bulan';
+            document.getElementById('jumlahPinjaman').max = parseInt(maksimal);
+
+            Object.keys(tarif).forEach(function (t) {
+                tenorSelect.innerHTML += '<option value="' + t + '">' + t + ' bulan (bunga ' + tarif[t] + '%)</option>';
+            });
+
+            ['bulanan', 'mingguan'].forEach(function (f) {
+                const radio = document.getElementById(f === 'bulanan' ? 'frekBulanan' : 'frekMingguan');
+                const allowed = frekuensi.indexOf(f) !== -1;
+                radio.disabled = !allowed;
+                radio.parentElement.style.display = allowed ? '' : 'none';
+                if (!allowed) radio.checked = false;
+            });
+            if (!getFrekuensiTerpilih()) {
+                document.getElementById(frekuensi[0] === 'mingguan' ? 'frekMingguan' : 'frekBulanan').checked = true;
+            }
+
             updateCalculation();
         });
 
-        // Update calculation when amount or tenor changes
+        // Update calculation when amount, tenor or frekuensi changes
         document.getElementById('jumlahPinjaman').addEventListener('input', updateCalculation);
         document.getElementById('tenorSelect').addEventListener('change', updateCalculation);
+        document.querySelectorAll('input[name="frekuensi"]').forEach(function (r) {
+            r.addEventListener('change', updateCalculation);
+        });
 
         function updateCalculation() {
-            const selectedOption = document.getElementById('jenisPinjamanSelect').options[document.getElementById('jenisPinjamanSelect').selectedIndex];
             const jumlah = parseInt(document.getElementById('jumlahPinjaman').value) || 0;
             const tenor = parseInt(document.getElementById('tenorSelect').value) || 0;
+            const frekuensi = getFrekuensiTerpilih();
+            const tarif = getTarifTerpilih();
             const calculationInfo = document.getElementById('calculationInfo');
-            
-            if (selectedOption && jumlah > 0 && tenor > 0) {
-                const bunga = parseFloat(selectedOption.getAttribute('data-bunga'));
-                const totalPinjaman = jumlah * (1 + (bunga / 100) * (tenor / 12));
-                const angsuranPerBulan = totalPinjaman / tenor;
-                
-                document.getElementById('displayBunga').textContent = bunga + '%';
-                document.getElementById('displayTotal').textContent = 'Rp ' + Math.round(totalPinjaman).toLocaleString('id-ID');
-                document.getElementById('displayAngsuran').textContent = 'Rp ' + Math.round(angsuranPerBulan).toLocaleString('id-ID');
-                
+
+            if (jumlah > 0 && tenor > 0 && frekuensi && tarif[tenor] !== undefined) {
+                const h = hitungPinjaman(jumlah, tarif[tenor], tenor, frekuensi, 'flat');
+                const akhir = h.rincian[h.rincian.length - 1].jumlah;
+
+                document.getElementById('displayBunga').textContent = tarif[tenor] + '%';
+                document.getElementById('displayTotal').textContent = 'Rp ' + h.total.toLocaleString('id-ID');
+                document.getElementById('labelAngsuran').textContent = 'Angsuran/' + labelPeriode(frekuensi);
+                document.getElementById('displayAngsuran').textContent = 'Rp ' + h.angsuran.toLocaleString('id-ID');
+                document.getElementById('displayCicilan').textContent = h.jumlahCicilan + '× cicilan' +
+                    (akhir !== h.angsuran ? ' (terakhir Rp ' + akhir.toLocaleString('id-ID') + ')' : '');
+
                 calculationInfo.style.display = 'block';
             } else {
                 calculationInfo.style.display = 'none';
@@ -637,8 +695,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             document.getElementById('detail_kode_anggota').textContent = button.getAttribute('data-kode_anggota');
             document.getElementById('detail_jenis').textContent = button.getAttribute('data-jenis');
             document.getElementById('detail_jumlah').textContent = 'Rp ' + Number(button.getAttribute('data-jumlah')).toLocaleString('id-ID');
-            document.getElementById('detail_tenor').textContent = button.getAttribute('data-tenor') + ' bulan';
-            document.getElementById('detail_bunga').textContent = button.getAttribute('data-bunga') + '%';
+            document.getElementById('detail_tenor').textContent = button.getAttribute('data-tenor');
+            document.getElementById('detail_bunga').textContent = button.getAttribute('data-bunga');
             
             var status = button.getAttribute('data-status');
             var statusClass = {
@@ -660,19 +718,24 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
         document.getElementById('formPengajuan').addEventListener('submit', function(e) {
             const selectedOption = document.getElementById('jenisPinjamanSelect').options[document.getElementById('jenisPinjamanSelect').selectedIndex];
             const maksimal = selectedOption ? parseInt(selectedOption.getAttribute('data-maksimal')) : 0;
-            const tenorMax = selectedOption ? parseInt(selectedOption.getAttribute('data-tenor')) : 0;
             const jumlah = parseInt(document.getElementById('jumlahPinjaman').value);
             const tenor = parseInt(document.getElementById('tenorSelect').value);
-            
+
             if (jumlah > maksimal) {
                 e.preventDefault();
                 alert('Jumlah pinjaman melebihi batas maksimal! Maksimal: Rp ' + maksimal.toLocaleString('id-ID'));
                 return false;
             }
-            
-            if (tenor > tenorMax) {
+
+            if (getTarifTerpilih()[tenor] === undefined) {
                 e.preventDefault();
-                alert('Tenor melebihi batas maksimal! Maksimal: ' + tenorMax + ' bulan');
+                alert('Tenor tidak tersedia untuk jenis pinjaman ini.');
+                return false;
+            }
+
+            if (!getFrekuensiTerpilih()) {
+                e.preventDefault();
+                alert('Pilih frekuensi angsuran.');
                 return false;
             }
             

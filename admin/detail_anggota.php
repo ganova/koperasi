@@ -532,10 +532,10 @@ function formatRupiah($angka) {
                                             <div>
                                                 <small class="fw-bold"><?php echo $loan['kode_pinjaman']; ?></small>
                                                 <br>
-                                                <small class="text-muted"><?php echo $loan['nama_jenis']; ?> (<?php echo $loan['bunga']; ?>%)</small>
+                                                <small class="text-muted"><?php echo $loan['nama_jenis']; ?> (<?php echo labelBungaRow($loan); ?>)</small>
                                                 <br>
                                                 <small class="loan-detail">
-                                                    Tenor: <?php echo $loan['tenor']; ?> bln | Jatuh tempo: <?php echo date('d/m/Y', strtotime($loan['jatuh_tempo'])); ?>
+                                                    Tenor: <?php echo labelTenorRow($loan); ?> | Jatuh tempo: <?php echo date('d/m/Y', strtotime($loan['jatuh_tempo'])); ?>
                                                 </small>
                                             </div>
                                             <div class="text-end">

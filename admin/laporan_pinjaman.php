@@ -405,10 +405,10 @@ if (count($pinjaman) > 0) {
                                             </small>
                                         </td>
                                         <td>
-                                            <span class="badge bg-info"><?php echo $p['tenor']; ?> bln</span>
+                                            <span class="badge bg-info"><?php echo labelTenorRow($p); ?></span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-secondary"><?php echo $p['bunga']; ?>%</span>
+                                            <span class="badge bg-secondary"><?php echo labelBungaRow($p); ?></span>
                                         </td>
                                         <td>
                                             <small><?php echo date('d/m/Y', strtotime($p['tanggal_pencairan'])); ?></small>

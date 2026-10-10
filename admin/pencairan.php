@@ -71,73 +71,8 @@ if ($_POST && isset($_POST['cairkan'])) {
             $stmt_update->bindParam(':id', $id);
             $stmt_update->execute();
             
-            // Buat record pinjaman setelah pencairan
-            $kode_pinjaman = 'PJN-' . date('Ymd') . '-' . str_pad($pengajuan['id'], 4, '0', STR_PAD_LEFT);
-            
-            // Hitung total pinjaman dengan bunga
-            $jumlah_pinjaman = $pengajuan['jumlah_pinjaman'];
-            $bunga = $pengajuan['bunga'];
-            $tenor = $pengajuan['tenor'];
-            
-            // Rumus bunga per tahun
-            $bunga_per_tahun = $bunga / 100;
-            $bunga_total = $jumlah_pinjaman * $bunga_per_tahun * ($tenor / 12);
-            $total_pinjaman = $jumlah_pinjaman + $bunga_total;
-            $angsuran_per_bulan = $total_pinjaman / $tenor;
-            
-            // Cek apakah pinjaman sudah ada
-            $query_cek_pinjaman = "SELECT id FROM pinjaman WHERE pengajuan_id = :pengajuan_id";
-            $stmt_cek = $db->prepare($query_cek_pinjaman);
-            $stmt_cek->bindParam(':pengajuan_id', $id);
-            $stmt_cek->execute();
-            
-            if ($stmt_cek->rowCount() == 0) {
-                // Insert ke tabel pinjaman
-                $query_pinjaman = "INSERT INTO pinjaman 
-                    (pengajuan_id, kode_pinjaman, anggota_id, jenis_pinjaman_id, 
-                    jumlah_pinjaman, sisa_pokok, tenor, bunga, total_pinjaman, 
-                    angsuran_per_bulan, tanggal_pencairan, jatuh_tempo, status) 
-                    VALUES 
-                    (:pengajuan_id, :kode_pinjaman, :anggota_id, :jenis_pinjaman_id,
-                    :jumlah_pinjaman, :sisa_pokok, :tenor, :bunga, :total_pinjaman,
-                    :angsuran_per_bulan, CURDATE(), DATE_ADD(CURDATE(), INTERVAL :tenor MONTH), 'aktif')";
-                
-                $stmt_pinjaman = $db->prepare($query_pinjaman);
-                $stmt_pinjaman->bindParam(':pengajuan_id', $id);
-                $stmt_pinjaman->bindParam(':kode_pinjaman', $kode_pinjaman);
-                $stmt_pinjaman->bindParam(':anggota_id', $pengajuan['anggota_id']);
-                $stmt_pinjaman->bindParam(':jenis_pinjaman_id', $pengajuan['jenis_pinjaman_id']);
-                $stmt_pinjaman->bindParam(':jumlah_pinjaman', $jumlah_pinjaman);
-                $stmt_pinjaman->bindParam(':sisa_pokok', $jumlah_pinjaman);
-                $stmt_pinjaman->bindParam(':tenor', $tenor);
-                $stmt_pinjaman->bindParam(':bunga', $bunga);
-                $stmt_pinjaman->bindParam(':total_pinjaman', $total_pinjaman);
-                $stmt_pinjaman->bindParam(':angsuran_per_bulan', $angsuran_per_bulan);
-                $stmt_pinjaman->execute();
-                
-                $pinjaman_id = $db->lastInsertId();
-                
-                // Buat jadwal angsuran
-                $pokok_per_bulan = $jumlah_pinjaman / $tenor;
-                $bunga_per_bulan = $bunga_total / $tenor;
-                
-                for ($i = 1; $i <= $tenor; $i++) {
-                    $query_angsuran = "INSERT INTO angsuran 
-                        (pinjaman_id, angsuran_ke, jumlah_angsuran, pokok, bunga, 
-                        tanggal_jatuh_tempo, status) 
-                        VALUES 
-                        (:pinjaman_id, :angsuran_ke, :jumlah_angsuran, :pokok, :bunga,
-                        DATE_ADD(CURDATE(), INTERVAL :angsuran_ke MONTH), 'belum_bayar')";
-                    
-                    $stmt_angsuran = $db->prepare($query_angsuran);
-                    $stmt_angsuran->bindParam(':pinjaman_id', $pinjaman_id);
-                    $stmt_angsuran->bindParam(':angsuran_ke', $i);
-                    $stmt_angsuran->bindParam(':jumlah_angsuran', $angsuran_per_bulan);
-                    $stmt_angsuran->bindParam(':pokok', $pokok_per_bulan);
-                    $stmt_angsuran->bindParam(':bunga', $bunga_per_bulan);
-                    $stmt_angsuran->execute();
-                }
-            }
+            // Buat record pinjaman + jadwal angsuran bila belum ada (dibuat saat persetujuan)
+            buatPinjamanDanJadwal($db, $pengajuan);
             
             $db->commit();
             $_SESSION['success'] = "Pinjaman berhasil dicairkan dan jadwal angsuran telah dibuat";
@@ -377,8 +312,8 @@ function formatRupiah($angka) {
                                             </td>
                                             <td><?php echo $p['nama_jenis']; ?></td>
                                             <td class="fw-bold text-primary"><?php echo formatRupiah($p['jumlah_pinjaman']); ?></td>
-                                            <td><?php echo $p['tenor']; ?> bulan</td>
-                                            <td><?php echo $p['bunga']; ?>%</td>
+                                            <td><?php echo labelTenorRow($p); ?></td>
+                                            <td><?php echo labelBungaRow($p); ?></td>
                                             <td>
                                                 <button class="btn btn-sm btn-success" data-bs-toggle="modal" 
                                                         data-bs-target="#cairkanModal" 
@@ -418,7 +353,7 @@ function formatRupiah($angka) {
                                             <th>Anggota</th>
                                             <th>Jenis</th>
                                             <th>Jumlah</th>
-                                            <th>Angsuran/Bulan</th>
+                                            <th>Angsuran</th>
                                             <th>Tenor</th>
                                             <th>Tanggal Cair</th>
                                             <th>Status</th>
@@ -434,8 +369,8 @@ function formatRupiah($angka) {
                                             </td>
                                             <td><?php echo $p['nama_jenis']; ?></td>
                                             <td class="fw-bold text-primary"><?php echo formatRupiah($p['jumlah_pinjaman']); ?></td>
-                                            <td class="text-info"><?php echo formatRupiah($p['angsuran_per_bulan']); ?></td>
-                                            <td><?php echo $p['tenor']; ?> bulan</td>
+                                            <td class="text-info"><?php echo formatRupiah($p['angsuran_per_bulan']); ?><small class="text-muted">/<?php echo strtolower(labelPeriode($p['frekuensi'])); ?></small></td>
+                                            <td><?php echo labelTenorRow($p); ?></td>
                                             <td><?php echo date('d/m/Y', strtotime($p['tanggal_pencairan'])); ?></td>
                                             <td>
                                                 <span class="badge bg-<?php echo $p['status'] == 'aktif' ? 'success' : 'secondary'; ?>">

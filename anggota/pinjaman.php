@@ -26,7 +26,7 @@ $filter_pinjaman = $_GET['pinjaman_id'] ?? '';
 $filter_status = $_GET['status'] ?? '';
 
 // Get pinjaman dengan perhitungan sisa yang benar (termasuk bunga)
-$query_pinjaman = "SELECT p.*, jp.nama_jenis, jp.bunga as bunga_persen,
+$query_pinjaman = "SELECT p.*, jp.nama_jenis,
                           (SELECT COUNT(*) FROM angsuran WHERE pinjaman_id = p.id AND status = 'lunas') as angsuran_lunas,
                           (SELECT COUNT(*) FROM angsuran WHERE pinjaman_id = p.id) as total_angsuran,
                           (SELECT COALESCE(SUM(pokok), 0) FROM angsuran WHERE pinjaman_id = p.id AND status = 'lunas') as total_pokok_dibayar,
@@ -41,6 +41,13 @@ $stmt_pinjaman = $db->prepare($query_pinjaman);
 $stmt_pinjaman->bindParam(':anggota_id', $anggota_data['id']);
 $stmt_pinjaman->execute();
 $pinjaman_list = $stmt_pinjaman->fetchAll(PDO::FETCH_ASSOC);
+// Label bunga/tenor dari data pinjaman itu sendiri (bukan tarif jenis saat ini)
+foreach ($pinjaman_list as &$pinjaman_row) {
+    $pinjaman_row['label_bunga'] = labelBungaRow($pinjaman_row);
+    $pinjaman_row['label_tenor'] = labelTenorRow($pinjaman_row);
+    $pinjaman_row['label_periode'] = labelPeriode($pinjaman_row['frekuensi']);
+}
+unset($pinjaman_row);
 
 error_log("Jumlah pinjaman ditemukan: " . count($pinjaman_list));
 
@@ -534,14 +541,14 @@ if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
                                                             </h6>
                                                             <p class="mb-1 text-muted small">
                                                                 <?php echo $pinjaman['nama_jenis']; ?> | 
-                                                                Bunga: <?php echo $pinjaman['bunga_persen']; ?>% | 
-                                                                Tenor: <?php echo $pinjaman['tenor']; ?> bulan
+                                                                Bunga: <?php echo $pinjaman['label_bunga']; ?> | 
+                                                                Tenor: <?php echo $pinjaman['label_tenor']; ?>
                                                             </p>
                                                         </div>
                                                         <button class="btn btn-sm btn-outline-primary" 
                                                                 data-bs-toggle="modal" 
                                                                 data-bs-target="#detailPinjamanModal"
-                                                                data-pinjaman='<?php echo json_encode($pinjaman); ?>'>
+                                                                data-pinjaman='<?php echo htmlspecialchars(json_encode($pinjaman), ENT_QUOTES); ?>'>
                                                             <i class="fas fa-eye"></i>
                                                         </button>
                                                     </div>
@@ -552,7 +559,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
                                                             <div class="fw-bold text-primary small"><?php echo formatRupiah($pinjaman['jumlah_pinjaman']); ?></div>
                                                         </div>
                                                         <div class="col-6">
-                                                            <small class="text-muted">Angsuran/Bulan</small>
+                                                            <small class="text-muted">Angsuran/<?php echo $pinjaman['label_periode']; ?></small>
                                                             <div class="fw-bold text-success small"><?php echo formatRupiah($pinjaman['angsuran_per_bulan']); ?></div>
                                                         </div>
                                                     </div>
@@ -888,12 +895,12 @@ if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
                             <tr>
                                 <td width="40%"><strong>Tenor</strong></td>
                                 <td>:</td>
-                                <td>${pinjaman.tenor} bulan</td>
+                                <td>${pinjaman.label_tenor}</td>
                             </tr>
                             <tr>
                                 <td><strong>Bunga</strong></td>
                                 <td>:</td>
-                                <td>${pinjaman.bunga_persen}%</td>
+                                <td>${pinjaman.label_bunga}</td>
                             </tr>
                             <tr>
                                 <td><strong>Total Pinjaman + Bunga</strong></td>
@@ -901,7 +908,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
                                 <td class="fw-bold">${formatRupiah(pinjaman.total_pinjaman)}</td>
                             </tr>
                             <tr>
-                                <td><strong>Angsuran per Bulan</strong></td>
+                                <td><strong>Angsuran per ${pinjaman.label_periode}</strong></td>
                                 <td>:</td>
                                 <td class="fw-bold text-success">${formatRupiah(pinjaman.angsuran_per_bulan)}</td>
                             </tr>
