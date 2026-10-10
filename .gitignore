@@ -1,0 +1,6 @@
+# Data pribadi anggota & file upload (jangan di-commit)
+assets/uploads/
+uploads/anggota/
+uploads/logo/
+backups/
+*.log
