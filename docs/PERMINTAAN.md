@@ -28,7 +28,7 @@ ditandai **[di luar cakupan P1]**.
 | Email dihapus dari form Tambah Anggota (Teller) **[di luar cakupan P1]** | Selesai | 869a7b1 |
 | Tambah Anggota (Teller) membuat akun login anggota sendiri (bug lama) **[di luar cakupan P1]** | Selesai | 72a3198 |
 | Denda cicilan mingguan: nominal per hari menurut besar pinjaman (1 jt = 1.500/hari, 2 jt = 2.500/hari, 3 jt = 3.500/hari) **[di luar cakupan P1]** | **Belum**, menunggu jawaban klien (pinjaman di antara/di atas 3 jt, berlaku mingguan saja atau bulanan juga, batas maksimal) | — |
-| Tabel angsuran resmi dari klien | **Menunggu klien** | — |
+| Tabel angsuran resmi dari klien | **Diterima & diverifikasi** (11 Okt 2026): 9 kasus (Rp 1/2/3 jt × 1/2/3 bulan) dan lampiran 12 minggu cocok persis dengan rumus yang ada, tidak ada perubahan kode. Uji ulang: `php tests/tabel_angsuran_test.php`. Admin cukup mengisi tarif 1 bln = 15%, 2 bln = 25%, 3 bln = 35% dan maksimal pinjaman ≥ Rp 3 jt | tests/ |
 
 ## Permintaan 2 — screenshot level admin + contoh slip bukti angsuran
 
