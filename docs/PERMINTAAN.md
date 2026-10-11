@@ -53,7 +53,7 @@ Migrasi: `database/migrations/2026_10_revisi_tahap2.sql` (jalankan setelah migra
 | C | Foto nasabah wajib saat pencairan, bisa dilihat Admin & Teller | Selesai | e42c403 |
 | D | Profil anggota read-only (foto pencairan, tanpa form & upload KTP) | Selesai | 4a5b41b |
 | E | Sidebar anggota: foto nasabah + badge status Aktif/Nonaktif | Selesai | 4a5b41b |
-| F | Teller: Edit Profil berfungsi (+telepon, foto 2 MB), Ubah Password (min. 8, backdoor dibuang), foto di sidebar | Selesai | lihat commit F |
+| F | Teller: Edit Profil berfungsi (+telepon, foto 2 MB), Ubah Password (min. 8, backdoor dibuang), foto di sidebar | Selesai | 6af5774 |
 
 Perubahan di luar poin: pinjaman otomatis ditandai lunas bila semua cicilan lunas (sebelumnya pinjaman skema lama
 tertahan `aktif` karena sisa pembulatan 0,01); `teller/ubah_password.php` kini cek role; backdoor password
