@@ -77,7 +77,9 @@ $stmt->execute();
 $pengajuan_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get disbursed loans dengan JOIN lengkap
-$query_dicairkan = "SELECT p.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis
+$query_dicairkan = "SELECT p.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis,
+                   (SELECT COUNT(*) FROM angsuran WHERE pinjaman_id = p.id AND status <> 'lunas') AS cicilan_belum,
+          (SELECT COUNT(*) FROM angsuran WHERE pinjaman_id = p.id) AS total_cicilan
                    FROM pinjaman p
                    LEFT JOIN anggota a ON p.anggota_id = a.id
                    LEFT JOIN jenis_pinjaman jp ON p.jenis_pinjaman_id = jp.id
@@ -347,6 +349,12 @@ function formatRupiah($angka) {
                                                         title="Foto nasabah saat pencairan">
                                                     <i class="fas fa-camera"></i>
                                                 </button>
+                                                <?php endif; ?>
+                                                <?php if ((int) $p['total_cicilan'] > 0 && (int) $p['cicilan_belum'] === 0): ?>
+                                                <a class="btn btn-sm btn-outline-success" target="_blank" rel="noopener"
+                                                   href="cetak_bukti_pelunasan.php?id=<?php echo (int) $p['id']; ?>" title="Cetak Bukti Pelunasan">
+                                                    <i class="fas fa-file-invoice"></i>
+                                                </a>
                                                 <?php endif; ?>
                                                 <a class="btn btn-sm btn-success" target="_blank" rel="noopener"
                                                    href="cetak_slip_pencairan.php?id=<?php echo (int) $p['id']; ?>" title="Cetak Slip">

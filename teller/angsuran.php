@@ -70,6 +70,9 @@ if ($_POST) {
             $stmt_update->bindParam(':status', $status_pinjaman);
             $stmt_update->bindParam(':pinjaman_id', $angsuran_data['pinjaman_id']);
             $stmt_update->execute();
+
+            // Semua cicilan lunas -> pinjaman lunas + catat tanggal lunas
+            tandaiLunasBilaSelesai($db, $angsuran_data['pinjaman_id']);
             
             // Hitung total pembayaran
             $total_bayar = $angsuran_data['jumlah_angsuran'] + $denda;
@@ -440,6 +443,14 @@ function formatRupiah($angka) {
                                                 <div class="progress-bar bg-success" style="width: <?php echo $progress; ?>%"></div>
                                             </div>
                                         </a>
+                                        <?php if ($pinjaman['total_angsuran'] > 0 && $pinjaman['angsuran_lunas'] == $pinjaman['total_angsuran']): ?>
+                                        <div class="list-group-item py-1 text-end bg-light">
+                                            <a class="btn btn-sm btn-success" target="_blank" rel="noopener"
+                                               href="cetak_bukti_pelunasan.php?id=<?php echo (int) $pinjaman['id']; ?>">
+                                                <i class="fas fa-print me-1"></i>Cetak Bukti Pelunasan
+                                            </a>
+                                        </div>
+                                        <?php endif; ?>
                                         <?php endforeach; ?>
                                     </div>
                                     <?php endif; ?>

@@ -34,7 +34,8 @@ if ($_POST) {
             $db->beginTransaction();
             
             // Update loan status to settled
-            $query_update = "UPDATE pinjaman SET status = 'lunas', sisa_pokok = 0 WHERE id = :id";
+            $set_lunas = kolomAda($db, 'pinjaman', 'tanggal_lunas') ? ", tanggal_lunas = CURDATE()" : '';
+            $query_update = "UPDATE pinjaman SET status = 'lunas', sisa_pokok = 0" . $set_lunas . " WHERE id = :id";
             $stmt_update = $db->prepare($query_update);
             $stmt_update->bindParam(':id', $id);
             

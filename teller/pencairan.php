@@ -90,7 +90,9 @@ if ($_POST && isset($_POST['proses_pencairan'])) {
 $query = "SELECT pp.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis,
           jp.maksimal_pinjaman, u.nama_lengkap as admin_name,
           p.id as pinjaman_id, p.kode_pinjaman, p.tanggal_pencairan, p.status as status_pinjaman,
-          p.foto_pencairan, uc.nama_lengkap as teller_name
+          p.foto_pencairan, uc.nama_lengkap as teller_name,
+          (SELECT COUNT(*) FROM angsuran WHERE pinjaman_id = p.id AND status <> 'lunas') AS cicilan_belum,
+          (SELECT COUNT(*) FROM angsuran WHERE pinjaman_id = p.id) AS total_cicilan
           FROM pengajuan_pinjaman pp
           JOIN anggota a ON pp.anggota_id = a.id
           JOIN jenis_pinjaman jp ON pp.jenis_pinjaman_id = jp.id
@@ -391,6 +393,13 @@ $stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchCo
                                                     title="Foto nasabah saat pencairan">
                                                 <i class="fas fa-camera"></i>
                                             </button>
+                                            <?php endif; ?>
+                                            <?php if (!empty($pengajuan['pinjaman_id']) && (int) $pengajuan['total_cicilan'] > 0 && (int) $pengajuan['cicilan_belum'] === 0): ?>
+                                            <a class="btn btn-sm btn-success btn-action" target="_blank" rel="noopener"
+                                               href="cetak_bukti_pelunasan.php?id=<?php echo (int) $pengajuan['pinjaman_id']; ?>"
+                                               title="Cetak Bukti Pelunasan">
+                                                <i class="fas fa-file-invoice"></i>
+                                            </a>
                                             <?php endif; ?>
                                             <!-- Slip pencairan (A5) - hanya untuk pengajuan yang sudah menjadi pinjaman -->
                                             <?php if (!empty($pengajuan['pinjaman_id'])): ?>

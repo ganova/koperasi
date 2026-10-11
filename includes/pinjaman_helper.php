@@ -287,3 +287,27 @@ if (!function_exists('kolomAda')) {
         return (int) $stmt->fetchColumn() > 0;
     }
 }
+
+if (!function_exists('tandaiLunasBilaSelesai')) {
+    /**
+     * Setelah pembayaran: bila SEMUA cicilan pinjaman sudah lunas, tandai pinjaman lunas
+     * (status, sisa_pokok = 0, tanggal_lunas = hari ini). Mengatasi sisa pembulatan 0,01 pada
+     * pinjaman skema lama yang sebelumnya membuat status tidak pernah berubah jadi lunas.
+     * @return bool true bila pinjaman sudah lunas
+     */
+    function tandaiLunasBilaSelesai($db, $pinjaman_id) {
+        $stmt = $db->prepare("SELECT COUNT(*) AS total, SUM(status <> 'lunas') AS belum
+                              FROM angsuran WHERE pinjaman_id = ?");
+        $stmt->execute([$pinjaman_id]);
+        $r = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ((int) $r['total'] === 0 || (int) $r['belum'] > 0) {
+            return false;
+        }
+        $set = "status = 'lunas', sisa_pokok = 0";
+        if (kolomAda($db, 'pinjaman', 'tanggal_lunas')) {
+            $set .= ", tanggal_lunas = COALESCE(tanggal_lunas, CURDATE())";
+        }
+        $db->prepare("UPDATE pinjaman SET $set WHERE id = ?")->execute([$pinjaman_id]);
+        return true;
+    }
+}
