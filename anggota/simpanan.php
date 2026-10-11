@@ -130,9 +130,7 @@ function formatRupiah($angka) {
                             <a href="riwayat_simpanan.php" class="btn btn-sm btn-outline-primary">
                                 <i class="fas fa-history me-1"></i> Riwayat
                             </a>
-                            <a href="cetak_buku.php" class="btn btn-sm btn-outline-success">
-                                <i class="fas fa-book me-1"></i> Buku Tabungan
-                            </a>
+
                         </div>
                     </div>
                 </div>

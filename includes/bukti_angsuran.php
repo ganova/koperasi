@@ -54,8 +54,20 @@ if (!$pelunasan) {
     }
 }
 $e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
-$admin_nama = isAdmin() ? $_SESSION['nama_lengkap'] : '';
-$teller_nama = isTeller() ? $_SESSION['nama_lengkap'] : '';
+// Pinjaman sudah lunas seluruhnya -> bukti menampilkan tulisan LUNAS (versi mini) menggantikan nominal
+$pinjaman_lunas = ((float) $b['sisa_tagihan'] <= 0.005) && (int) $b['total_cicilan'] > 0;
+
+// Hanya kolom Teller: nama teller yang mencatat pembayaran (bila tercatat), selain itu teller yang mencetak
+$teller_nama = '';
+$stmt_t = $db->prepare("SELECT u.nama_lengkap FROM transaksi t JOIN users u ON t.user_id = u.id
+                        WHERE t.keterangan = ? ORDER BY t.id DESC LIMIT 1");
+$stmt_t->execute(array('Pembayaran angsuran ke-' . $b['angsuran_ke'] . ' - ' . $b['kode_pinjaman']));
+$nama_pencatat = $stmt_t->fetchColumn();
+if ($nama_pencatat) {
+    $teller_nama = $nama_pencatat;
+} elseif (isTeller()) {
+    $teller_nama = $_SESSION['nama_lengkap'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -84,6 +96,8 @@ $teller_nama = isTeller() ? $_SESSION['nama_lengkap'] : '';
         .jumlah { margin-top: 8px; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 6px 2px; }
         .jumlah .nominal { font-size: 14pt; font-weight: bold; }
         .jumlah .kata { font-style: italic; margin-top: 2px; }
+        .lunas-mini { margin: 8px 0; text-align: center; border: 2px solid #1a7f37; color: #1a7f37; padding: 6px;
+                      font-weight: bold; font-size: 12pt; letter-spacing: 1px; }
         .stempel { position: absolute; right: 16mm; bottom: 14mm; border: 3px solid #1a7f37; color: #1a7f37; padding: 2px 10px;
                    font-size: 14pt; font-weight: bold; transform: rotate(-12deg); opacity: .75; letter-spacing: 2px; }
         .ttd-section { margin-top: 10px; display: flex; justify-content: space-around; }
@@ -108,7 +122,9 @@ $teller_nama = isTeller() ? $_SESSION['nama_lengkap'] : '';
             <h2><?php echo $e($koperasi['nama']); ?></h2>
             <p><?php echo $e($koperasi['alamat']); ?>, Telp: <?php echo $e($koperasi['telepon']); ?></p>
         </div>
+        <?php if (!$pinjaman_lunas): ?>
         <div class="stempel">LUNAS</div>
+        <?php endif; ?>
 
         <div class="cols">
             <div>
@@ -128,6 +144,9 @@ $teller_nama = isTeller() ? $_SESSION['nama_lengkap'] : '';
             </div>
         </div>
 
+        <?php if ($pinjaman_lunas): ?>
+        <div class="lunas-mini">LUNAS</div>
+        <?php else: ?>
         <div class="jumlah">
             <table class="data">
                 <tr><td class="label">Jumlah Angsuran</td><td class="sep">:</td><td><?php echo formatRupiah($jumlah_angsuran); ?></td></tr>
@@ -140,8 +159,9 @@ $teller_nama = isTeller() ? $_SESSION['nama_lengkap'] : '';
             </table>
         </div>
 
+        <?php endif; ?>
+
         <div class="ttd-section">
-            <div class="ttd-box"><div class="ttd-line"><strong>ADMIN</strong><br><?php echo $admin_nama !== '' ? $e($admin_nama) : '&nbsp;'; ?></div></div>
             <div class="ttd-box"><div class="ttd-line"><strong>TELLER</strong><br><?php echo $teller_nama !== '' ? $e($teller_nama) : '&nbsp;'; ?></div></div>
         </div>
     </div>

@@ -66,7 +66,7 @@ if (!empty($filter_status)) {
 }
 
 $query_angsuran .= " ORDER BY a.tanggal_jatuh_tempo DESC, a.created_at DESC
-                    LIMIT 50";
+                    LIMIT 500";
 
 $stmt_angsuran = $db->prepare($query_angsuran);
 $stmt_angsuran->bindParam(':anggota_id', $anggota_data['id']);
@@ -117,147 +117,55 @@ function formatRupiah($angka) {
     return 'Rp ' . number_format($angka, 0, ',', '.');
 }
 
-// Handle PDF download
-if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
-    // Load TCPDF
-    require_once '../tcpdf/tcpdf.php';
-    
-    // Create new PDF document
-    $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
-    
-    // Set document information
-    $pdf->SetCreator('Koperasi System');
-    $pdf->SetAuthor('Anggota');
-    $pdf->SetTitle('Riwayat Angsuran');
-    $pdf->SetSubject('Riwayat Angsuran Pinjaman');
-    
-    // Set margins
-    $pdf->SetMargins(15, 15, 15);
-    $pdf->SetHeaderMargin(0);
-    $pdf->SetFooterMargin(10);
-    
-    // Set auto page breaks
-    $pdf->SetAutoPageBreak(TRUE, 25);
-    
-    // Add a page
-    $pdf->AddPage();
-    
-    // Get koperasi data
-    $query_koperasi = "SELECT * FROM koperasi LIMIT 1";
-    $stmt_koperasi = $db->prepare($query_koperasi);
-    $stmt_koperasi->execute();
-    $koperasi_data = $stmt_koperasi->fetch(PDO::FETCH_ASSOC);
-    
-    // Header
-    $pdf->SetFont('helvetica', 'B', 14);
-    $pdf->Cell(180, 8, strtoupper($koperasi_data['nama'] ?? APP_NAME), 0, 1, 'C');
-    $pdf->SetFont('helvetica', 'B', 12);
-    $pdf->Cell(180, 8, 'RIWAYAT ANGSURAN PINJAMAN', 0, 1, 'C');
-    $pdf->SetFont('helvetica', '', 10);
-    $pdf->Cell(180, 6, 'Nama: ' . $anggota_data['nama_lengkap'] . ' (' . $anggota_data['kode_anggota'] . ')', 0, 1, 'C');
-    $pdf->Cell(180, 6, 'Tanggal Cetak: ' . date('d/m/Y H:i'), 0, 1, 'C');
-    $pdf->Ln(5);
-    
-    // Info filter
-    if (!empty($filter_pinjaman)) {
-        $pinjaman_filter = $db->prepare("SELECT kode_pinjaman FROM pinjaman WHERE id = :id");
-        $pinjaman_filter->bindParam(':id', $filter_pinjaman);
-        $pinjaman_filter->execute();
-        $pinjaman_data = $pinjaman_filter->fetch(PDO::FETCH_ASSOC);
-        $pdf->SetFont('helvetica', '', 9);
-        $pdf->Cell(180, 5, 'Filter Pinjaman: ' . $pinjaman_data['kode_pinjaman'], 0, 1, 'L');
+// Level Anggota hanya melihat riwayat; fitur cetak/unduh PDF dihapus (permintaan klien).
+
+/** Tabel riwayat angsuran (dipakai untuk tabel "belum lunas" dan "lunas"). */
+function tabelAngsuranAnggota($rows, $pesan_kosong) {
+    if (empty($rows)) {
+        echo '<div class="text-center py-2"><p class="text-muted mb-0 small">' . htmlspecialchars($pesan_kosong) . '</p></div>';
+        return;
     }
-    if (!empty($filter_status)) {
-        $pdf->Cell(180, 5, 'Filter Status: ' . $status_options[$filter_status], 0, 1, 'L');
+    $no = 1; $t_pokok = 0; $t_bunga = 0; $t_denda = 0; $t_jumlah = 0;
+    echo '<div class="table-responsive"><table class="table table-sm table-striped table-hover">';
+    echo '<thead><tr><th>No</th><th>Kode Pinjaman</th><th>Angsuran Ke</th><th>Jatuh Tempo</th><th>Pokok</th><th>Bunga</th><th>Denda</th><th>Total</th><th>Tanggal Bayar</th><th>Status</th></tr></thead><tbody>';
+    foreach ($rows as $a) {
+        $t_pokok += $a['pokok']; $t_bunga += $a['bunga']; $t_denda += $a['denda']; $t_jumlah += $a['jumlah_angsuran'];
+        $kelas = $a['status'] == 'lunas' ? 'success' : ($a['status'] == 'telat' ? 'danger' : 'warning');
+        echo '<tr>';
+        echo '<td>' . $no++ . '</td>';
+        echo '<td><code>' . htmlspecialchars($a['kode_pinjaman']) . '</code></td>';
+        echo '<td class="text-center">' . (int) $a['angsuran_ke'] . '</td>';
+        echo '<td>' . date('d/m/Y', strtotime($a['tanggal_jatuh_tempo'])) . '</td>';
+        echo '<td class="text-end">' . formatRupiah($a['pokok']) . '</td>';
+        echo '<td class="text-end">' . formatRupiah($a['bunga']) . '</td>';
+        echo '<td class="text-end text-danger">' . formatRupiah($a['denda']) . '</td>';
+        echo '<td class="text-end fw-bold text-primary">' . formatRupiah($a['jumlah_angsuran']) . '</td>';
+        echo '<td>' . ($a['tanggal_bayar'] ? date('d/m/Y', strtotime($a['tanggal_bayar'])) : '-') . '</td>';
+        echo '<td><span class="badge bg-' . $kelas . '">' . ucfirst(str_replace('_', ' ', $a['status'])) . '</span></td>';
+        echo '</tr>';
     }
-    $pdf->Ln(3);
-    
-    // ============================================
-    // TABEL ANGSURAN
-    // ============================================
-    
-    // Lebar kolom (total 180mm)
-    $col_no = 8;      // No
-    $col_kode = 25;   // Kode Pinjaman
-    $col_ke = 10;     // Angsuran Ke
-    $col_tgl = 20;    // Jatuh Tempo
-    $col_pokok = 25;  // Pokok
-    $col_bunga = 25;  // Bunga
-    $col_denda = 20;  // Denda
-    $col_total = 25;  // Total
-    $col_status = 22; // Status
-    
-    // Header tabel
-    $pdf->SetFont('helvetica', 'B', 8);
-    $pdf->SetFillColor(220, 220, 220);
-    
-    $pdf->Cell($col_no, 8, 'No', 1, 0, 'C', 1);
-    $pdf->Cell($col_kode, 8, 'Kode Pinjaman', 1, 0, 'C', 1);
-    $pdf->Cell($col_ke, 8, 'Ke', 1, 0, 'C', 1);
-    $pdf->Cell($col_tgl, 8, 'Jatuh Tempo', 1, 0, 'C', 1);
-    $pdf->Cell($col_pokok, 8, 'Pokok', 1, 0, 'C', 1);
-    $pdf->Cell($col_bunga, 8, 'Bunga', 1, 0, 'C', 1);
-    $pdf->Cell($col_denda, 8, 'Denda', 1, 0, 'C', 1);
-    $pdf->Cell($col_total, 8, 'Total', 1, 0, 'C', 1);
-    $pdf->Cell($col_status, 8, 'Status', 1, 1, 'C', 1);
-    
-    // Data tabel
-    $pdf->SetFont('helvetica', '', 7);
-    $no = 1;
-    $total_pokok_all = 0;
-    $total_bunga_all = 0;
-    $total_denda_all = 0;
-    $total_all = 0;
-    
-    if (empty($angsuran_list)) {
-        $pdf->Cell($col_no + $col_kode + $col_ke + $col_tgl + $col_pokok + $col_bunga + $col_denda + $col_total + $col_status, 8, 'Tidak ada data angsuran', 1, 1, 'C');
-    } else {
-        foreach ($angsuran_list as $angsuran) {
-            $total_pokok_all += $angsuran['pokok'];
-            $total_bunga_all += $angsuran['bunga'];
-            $total_denda_all += $angsuran['denda'];
-            $total_all += $angsuran['jumlah_angsuran'];
-            
-            $tanggal = date('d/m/Y', strtotime($angsuran['tanggal_jatuh_tempo']));
-            $status_class = $angsuran['status'] == 'lunas' ? 'Lunas' : ($angsuran['status'] == 'telat' ? 'Telat' : 'Belum Bayar');
-            
-            $pdf->Cell($col_no, 6, $no++, 1, 0, 'C');
-            $pdf->Cell($col_kode, 6, $angsuran['kode_pinjaman'], 1, 0, 'L');
-            $pdf->Cell($col_ke, 6, $angsuran['angsuran_ke'], 1, 0, 'C');
-            $pdf->Cell($col_tgl, 6, $tanggal, 1, 0, 'C');
-            $pdf->Cell($col_pokok, 6, formatRupiah($angsuran['pokok']), 1, 0, 'R');
-            $pdf->Cell($col_bunga, 6, formatRupiah($angsuran['bunga']), 1, 0, 'R');
-            $pdf->Cell($col_denda, 6, formatRupiah($angsuran['denda']), 1, 0, 'R');
-            $pdf->Cell($col_total, 6, formatRupiah($angsuran['jumlah_angsuran']), 1, 0, 'R');
-            $pdf->Cell($col_status, 6, $status_class, 1, 1, 'C');
-        }
-        
-        // Summary
-        $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->SetFillColor(240, 240, 240);
-        
-        $pdf->Cell($col_no + $col_kode + $col_ke + $col_tgl, 7, 'TOTAL', 1, 0, 'R', 1);
-        $pdf->Cell($col_pokok, 7, formatRupiah($total_pokok_all), 1, 0, 'R', 1);
-        $pdf->Cell($col_bunga, 7, formatRupiah($total_bunga_all), 1, 0, 'R', 1);
-        $pdf->Cell($col_denda, 7, formatRupiah($total_denda_all), 1, 0, 'R', 1);
-        $pdf->Cell($col_total, 7, formatRupiah($total_all), 1, 0, 'R', 1);
-        $pdf->Cell($col_status, 7, '', 1, 1, 'C', 1);
-    }
-    
-    // Footer
-    $pdf->Ln(10);
-    $pdf->SetFont('helvetica', '', 9);
-    $pdf->Cell(90, 6, 'Dicetak pada: ' . date('d/m/Y H:i'), 0, 0, 'L');
-    $pdf->Cell(90, 6, 'Hormat Kami,', 0, 1, 'R');
-    $pdf->Ln(15);
-    $pdf->SetFont('helvetica', 'B', 9);
-    $pdf->Cell(90, 6, '', 0, 0, 'L');
-    $pdf->Cell(90, 6, $anggota_data['nama_lengkap'], 0, 1, 'R');
-    
-    // Output PDF
-    $pdf->Output('Riwayat_Angsuran_' . $anggota_data['kode_anggota'] . '.pdf', 'I');
-    exit();
+    echo '</tbody><tfoot class="table-light"><tr><th colspan="4" class="text-end">TOTAL</th>';
+    echo '<th class="text-end">' . formatRupiah($t_pokok) . '</th><th class="text-end">' . formatRupiah($t_bunga) . '</th>';
+    echo '<th class="text-end text-danger">' . formatRupiah($t_denda) . '</th><th class="text-end text-primary">' . formatRupiah($t_jumlah) . '</th>';
+    echo '<th colspan="2"></th></tr></tfoot></table></div>';
 }
+
+// Pisahkan: belum lunas (urut jatuh tempo terdekat) dan lunas (urut pembayaran terbaru)
+$angsuran_belum = [];
+$angsuran_lunas = [];
+foreach ($angsuran_list as $row_angsuran) {
+    if ($row_angsuran['status'] == 'lunas') {
+        $angsuran_lunas[] = $row_angsuran;
+    } else {
+        $angsuran_belum[] = $row_angsuran;
+    }
+}
+usort($angsuran_belum, function ($x, $y) {
+    return strcmp($x['tanggal_jatuh_tempo'] . sprintf('%06d', $x['angsuran_ke']), $y['tanggal_jatuh_tempo'] . sprintf('%06d', $y['angsuran_ke']));
+});
+usort($angsuran_lunas, function ($x, $y) {
+    return strcmp($y['tanggal_bayar'] . sprintf('%06d', $y['angsuran_ke']), $x['tanggal_bayar'] . sprintf('%06d', $x['angsuran_ke']));
+});
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -346,12 +254,6 @@ if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
                     <h1 class="h3">
                         <i class="fas fa-hand-holding-usd me-2"></i>Pinjaman Saya
                     </h1>
-                    <div class="btn-toolbar mb-2 mb-md-0">
-                        <a href="?action=pdf&pinjaman_id=<?php echo $filter_pinjaman; ?>&status=<?php echo $filter_status; ?>" 
-                           class="btn btn-sm btn-pdf me-2" target="_blank">
-                            <i class="fas fa-file-pdf me-1"></i> Download Riwayat PDF
-                        </a>
-                    </div>
                 </div>
 
                 <?php if (isset($_SESSION['success'])): ?>
@@ -606,13 +508,13 @@ if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
                             </div>
                         </div>
 
-                        <!-- Riwayat Angsuran -->
+                        <!-- Riwayat Angsuran: dipisah antara belum lunas dan lunas -->
                         <div class="card mb-3">
                             <div class="card-header py-2">
                                 <h6 class="card-title mb-0">
                                     <i class="fas fa-credit-card me-2"></i>Riwayat Angsuran
-                                    <span class="badge bg-primary ms-2"><?php echo count($angsuran_list); ?> angsuran</span>
-                                    <span class="badge bg-success ms-2"><?php echo $total_angsuran_lunas; ?> lunas</span>
+                                    <span class="badge bg-warning text-dark ms-2"><?php echo count($angsuran_belum); ?> belum lunas</span>
+                                    <span class="badge bg-success ms-2"><?php echo count($angsuran_lunas); ?> lunas</span>
                                 </h6>
                             </div>
                             <div class="card-body p-3">
@@ -651,74 +553,30 @@ if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
                                     </div>
                                 </div>
 
-                                <?php if (!empty($angsuran_list)): ?>
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-striped table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>No</th>
-                                                <th>Kode Pinjaman</th>
-                                                <th>Angsuran Ke</th>
-                                                <th>Jatuh Tempo</th>
-                                                <th>Pokok</th>
-                                                <th>Bunga</th>
-                                                <th>Denda</th>
-                                                <th>Total</th>
-                                                <th>Tanggal Bayar</th>
-                                                <th>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php 
-                                            $no = 1;
-                                            $total_pokok = 0;
-                                            $total_bunga = 0;
-                                            $total_denda = 0;
-                                            $total_jumlah = 0;
-                                            foreach ($angsuran_list as $a): 
-                                                $total_pokok += $a['pokok'];
-                                                $total_bunga += $a['bunga'];
-                                                $total_denda += $a['denda'];
-                                                $total_jumlah += $a['jumlah_angsuran'];
-                                                
-                                                $status_class = $a['status'] == 'lunas' ? 'success' : ($a['status'] == 'telat' ? 'danger' : 'warning');
-                                            ?>
-                                            <tr>
-                                                <td><?php echo $no++; ?></td>
-                                                <td><code><?php echo $a['kode_pinjaman']; ?></code></td>
-                                                <td class="text-center"><?php echo $a['angsuran_ke']; ?></td>
-                                                <td><?php echo date('d/m/Y', strtotime($a['tanggal_jatuh_tempo'])); ?></td>
-                                                <td class="text-end"><?php echo formatRupiah($a['pokok']); ?></td>
-                                                <td class="text-end"><?php echo formatRupiah($a['bunga']); ?></td>
-                                                <td class="text-end text-danger"><?php echo formatRupiah($a['denda']); ?></td>
-                                                <td class="text-end fw-bold text-primary"><?php echo formatRupiah($a['jumlah_angsuran']); ?></td>
-                                                <td><?php echo $a['tanggal_bayar'] ? date('d/m/Y', strtotime($a['tanggal_bayar'])) : '-'; ?></td>
-                                                <td>
-                                                    <span class="badge bg-<?php echo $status_class; ?>">
-                                                        <?php echo ucfirst($a['status']); ?>
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                        <tfoot class="table-light">
-                                            <tr>
-                                                <th colspan="4" class="text-end">TOTAL</th>
-                                                <th class="text-end"><?php echo formatRupiah($total_pokok); ?></th>
-                                                <th class="text-end"><?php echo formatRupiah($total_bunga); ?></th>
-                                                <th class="text-end text-danger"><?php echo formatRupiah($total_denda); ?></th>
-                                                <th class="text-end text-primary"><?php echo formatRupiah($total_jumlah); ?></th>
-                                                <th colspan="2"></th>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                                <?php else: ?>
-                                <div class="text-center py-2">
-                                    <i class="fas fa-credit-card fa-2x text-muted mb-2"></i>
-                                    <p class="text-muted mb-0 small">Belum ada riwayat angsuran</p>
-                                </div>
-                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <div class="card mb-3">
+                            <div class="card-header py-2">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-hourglass-half me-2 text-warning"></i>Angsuran Belum Lunas / Akan Datang
+                                    <span class="badge bg-warning text-dark ms-2"><?php echo count($angsuran_belum); ?></span>
+                                </h6>
+                            </div>
+                            <div class="card-body p-3">
+                                <?php tabelAngsuranAnggota($angsuran_belum, 'Tidak ada angsuran yang belum lunas'); ?>
+                            </div>
+                        </div>
+
+                        <div class="card mb-3">
+                            <div class="card-header py-2">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-check-circle me-2 text-success"></i>Angsuran Lunas
+                                    <span class="badge bg-success ms-2"><?php echo count($angsuran_lunas); ?></span>
+                                </h6>
+                            </div>
+                            <div class="card-body p-3">
+                                <?php tabelAngsuranAnggota($angsuran_lunas, 'Belum ada angsuran yang lunas'); ?>
                             </div>
                         </div>
 
@@ -779,7 +637,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'pdf') {
                             <i class="fas fa-info-circle me-2"></i>
                             <small>
                                 <strong>Informasi:</strong> 
-                                Klik tombol <strong>"Download Riwayat PDF"</strong> untuk mengunduh riwayat angsuran dalam format PDF.
+                                Angsuran yang belum lunas dan yang sudah lunas ditampilkan di tabel terpisah.
                                 Gunakan filter untuk menyesuaikan data yang ditampilkan.
                             </small>
                         </div>

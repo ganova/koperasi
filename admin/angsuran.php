@@ -28,6 +28,22 @@ perbaruiDendaOtomatis($db);
 
 // Handle payment
 if ($_POST) {
+    // Koreksi: batalkan pembayaran yang salah pencet (hanya Admin, alasan wajib)
+    if (isset($_POST['batalkan_bayar'])) {
+        try {
+            $_SESSION['success'] = batalkanPembayaranAngsuran(
+                $db,
+                (int) $_POST['id'],
+                isset($_POST['alasan']) ? $_POST['alasan'] : '',
+                $_SESSION['user_id']
+            );
+        } catch (Exception $e) {
+            $_SESSION['error'] = "Gagal membatalkan pembayaran: " . $e->getMessage();
+        }
+        header("Location: angsuran.php" . (isset($_GET['pinjaman_id']) ? "?pinjaman_id=" . (int) $_GET['pinjaman_id'] : ""));
+        exit();
+    }
+
     if (isset($_POST['bayar'])) {
         $id = $_POST['id'];
         // Denda: kosong = otomatis (tarif per hari x hari terlambat); diisi = manual
@@ -574,6 +590,15 @@ function formatRupiah($angka) {
                                                            title="Cetak Bukti Pembayaran">
                                                             <i class="fas fa-print"></i>
                                                         </a>
+                                                        <button type="button" class="btn btn-sm btn-outline-danger ms-1" data-bs-toggle="modal"
+                                                                data-bs-target="#batalModal"
+                                                                data-id="<?php echo (int) $angsuran['id']; ?>"
+                                                                data-angsuran_ke="<?php echo (int) $angsuran['angsuran_ke']; ?>"
+                                                                data-kode="<?php echo htmlspecialchars($angsuran['kode_pinjaman']); ?>"
+                                                                data-total="<?php echo $angsuran['jumlah_angsuran'] + $angsuran['denda']; ?>"
+                                                                title="Batalkan pembayaran (koreksi)">
+                                                            <i class="fas fa-undo"></i>
+                                                        </button>
                                                     <?php endif; ?>
                                                 </td>
                                             </tr>
@@ -637,7 +662,51 @@ function formatRupiah($angka) {
         </div>
     </div>
 
+    <!-- Batalkan Pembayaran Modal (koreksi, hanya Admin) -->
+    <div class="modal fade" id="batalModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST">
+                    <div class="modal-header">
+                        <h5 class="modal-title text-danger">Batalkan Pembayaran</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="id" id="batal_id">
+                        <p>Apakah Anda yakin ingin membatalkan pembayaran:</p>
+                        <p class="fw-bold mb-1">Angsuran ke-<span id="batal_ke"></span> &mdash; <span id="batal_kode"></span></p>
+                        <p class="mb-3">Nominal tercatat: <strong id="batal_total"></strong></p>
+                        <div class="mb-3">
+                            <label for="batal_alasan" class="form-label">Alasan Pembatalan <span class="text-danger">*</span></label>
+                            <textarea name="alasan" id="batal_alasan" class="form-control" rows="3" required minlength="5" maxlength="250"
+                                      placeholder="Contoh: salah pencet bayar oleh teller"></textarea>
+                        </div>
+                        <div class="alert alert-info mb-0">
+                            <small><i class="fas fa-info-circle me-1"></i>
+                            Cicilan kembali <strong>belum bayar</strong>, kas dan saldo dikurangi sebesar nominal tercatat,
+                            dan koreksi ini dicatat (siapa &amp; alasannya). Cicilan bisa dibayar ulang setelahnya.</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" name="batalkan_bayar" class="btn btn-danger">Batalkan Pembayaran</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('batalModal').addEventListener('show.bs.modal', function (event) {
+            var b = event.relatedTarget;
+            document.getElementById('batal_id').value = b.getAttribute('data-id');
+            document.getElementById('batal_ke').textContent = b.getAttribute('data-angsuran_ke');
+            document.getElementById('batal_kode').textContent = b.getAttribute('data-kode');
+            document.getElementById('batal_total').textContent = 'Rp ' + Number(b.getAttribute('data-total')).toLocaleString('id-ID');
+            document.getElementById('batal_alasan').value = '';
+        });
+    </script>
     <script>
         // Bayar Modal
         var bayarModal = document.getElementById('bayarModal');

@@ -554,9 +554,7 @@ rsort($tahun_list);
 
                 <!-- Tombol Aksi -->
                 <div class="mt-4 text-end">
-                    <a href="cetak_shu_saya.php?tahun=<?php echo $tahun; ?>" class="btn btn-danger" target="_blank">
-                        <i class="fas fa-file-pdf me-1"></i> Cetak SHU
-                    </a>
+
                 </div>
             </main>
         </div>

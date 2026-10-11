@@ -540,7 +540,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                         <div class="alert alert-info">
                             <small>
                                 <i class="fas fa-info-circle me-1"></i>
-                                Dengan menyetujui, sistem akan membuat data pinjaman baru dan jadwal angsuran.
+                                Setelah disetujui, pengajuan menunggu diproses pencairan oleh Teller (jadwal angsuran dibuat saat pencairan).
                             </small>
                         </div>
                     </div>

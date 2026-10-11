@@ -59,6 +59,22 @@ Perubahan di luar poin: pinjaman otomatis ditandai lunas bila semua cicilan luna
 tertahan `aktif` karena sisa pembulatan 0,01); `teller/ubah_password.php` kini cek role; backdoor password
 `'password'` dibuang.
 
+## Permintaan 4 — masukan klien setelah uji tahap 2 (screenshot, 12 Okt 2026)
+
+| # | Isi | Status |
+|---|---|---|
+| 4.1 | Hapus tanda "@" (Proses Pencairan, detail pengajuan Teller/Admin, slip pencairan): kini "Mingguan — 12× Rp 112.500" | Selesai |
+| 4.2 | Bukti Pembayaran Angsuran: hanya kolom Teller + nama (kolom Admin dihapus) | Selesai |
+| 4.3 | Bukti Pembayaran Angsuran pada pinjaman yang sudah lunas: jumlah angsuran/denda/total/terbilang diganti kotak hijau "LUNAS" versi mini | Selesai |
+| 4.4 | Bukti Pelunasan: kolom tanda tangan Admin dan Teller (sebelumnya Anggota dan Teller) | Selesai |
+| 4.5 | Level Anggota: semua fitur cetak/unduh dihapus (PDF angsuran, buku tabungan, SHU); URL lama 404 **[di luar cakupan P1]** | Selesai |
+| 4.6 | Pinjaman Saya (Anggota): angsuran belum lunas dan lunas dipisah jadi dua tabel | Selesai |
+| 4.7 | Pembayaran Angsuran (Admin): tombol "Batalkan Pembayaran" (koreksi salah pencet bayar) dengan alasan wajib, jejak di log_koreksi; hanya Admin **[di luar cakupan P1]** | Selesai |
+| 4.8 | Teks modal persetujuan diperbarui (jadwal dibuat saat pencairan, bukan saat persetujuan) | Selesai |
+| 4.9 | Laporan Harian (PDF, layar, Excel): kolom Tgl Bayar dan Jatuh Tempo; kolom Waktu diperbaiki memakai jam pembayaran (sebelumnya jam jadwal dibuat) | Selesai |
+
+Tidak ada migrasi baru untuk Permintaan 4.
+
 ## Hal bawaan (bukan permintaan klien)
 
 Banner "Database belum di-update", README, repo GitHub, `sql_mode` per koneksi di `config/config.php`,

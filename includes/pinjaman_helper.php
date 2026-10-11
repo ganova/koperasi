@@ -170,9 +170,9 @@ if (!function_exists('labelTenorRow')) {
 }
 
 if (!function_exists('ringkasanAngsuran')) {
-    /** Contoh: "Mingguan — 12× @ Rp 112.500" */
+    /** Contoh: "Mingguan — 12× Rp 112.500" */
     function ringkasanAngsuran($hitung) {
-        return labelFrekuensi($hitung['frekuensi']) . ' — ' . $hitung['jumlah_cicilan'] . '× @ Rp '
+        return labelFrekuensi($hitung['frekuensi']) . ' — ' . $hitung['jumlah_cicilan'] . '× Rp '
             . number_format(round($hitung['angsuran']), 0, ',', '.');
     }
 }

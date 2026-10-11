@@ -115,6 +115,9 @@ $query_angsuran = "SELECT a.*,
                           ang.kode_anggota,
                           ang.nama_lengkap, 
                           p.kode_pinjaman,
+                          (SELECT MAX(t.tanggal_transaksi) FROM transaksi t
+                            WHERE t.keterangan = CONCAT('Pembayaran angsuran ke-', a.angsuran_ke, ' - ', p.kode_pinjaman)
+                              AND t.jumlah > 0) AS waktu_bayar,
                           jp.nama_jenis as jenis_pinjaman
                   FROM angsuran a
                   JOIN pinjaman p ON a.pinjaman_id = p.id
@@ -275,6 +278,8 @@ header("Content-Disposition: attachment; filename=Laporan_Harian_" . date('Ymd',
         <thead>
             <tr>
                 <th>Waktu</th>
+                <th>Tanggal Bayar</th>
+                <th>Jatuh Tempo</th>
                 <th>Kode Anggota</th>
                 <th>Nama Anggota</th>
                 <th>Kode Pinjaman</th>
@@ -286,7 +291,9 @@ header("Content-Disposition: attachment; filename=Laporan_Harian_" . date('Ymd',
         <tbody>
             <?php foreach ($angsuran as $a): ?>
             <tr>
-                <td><?php echo date('H:i', strtotime($a['created_at'])); ?></td>
+                <td><?php echo $a['waktu_bayar'] ? date('H:i', strtotime($a['waktu_bayar'])) : '-'; ?></td>
+                <td><?php echo $a['tanggal_bayar'] ? date('d/m/Y', strtotime($a['tanggal_bayar'])) : '-'; ?></td>
+                <td><?php echo date('d/m/Y', strtotime($a['tanggal_jatuh_tempo'])); ?></td>
                 <td><?php echo $a['kode_anggota']; ?></td>
                 <td><?php echo $a['nama_lengkap']; ?></td>
                 <td><?php echo $a['kode_pinjaman']; ?></td>

@@ -130,6 +130,9 @@ $query_angsuran = "SELECT a.*,
                           ang.kode_anggota,
                           ang.nama_lengkap, 
                           p.kode_pinjaman,
+                          (SELECT MAX(t.tanggal_transaksi) FROM transaksi t
+                            WHERE t.keterangan = CONCAT('Pembayaran angsuran ke-', a.angsuran_ke, ' - ', p.kode_pinjaman)
+                              AND t.jumlah > 0) AS waktu_bayar,
                           jp.nama_jenis as jenis_pinjaman
                   FROM angsuran a
                   JOIN pinjaman p ON a.pinjaman_id = p.id
@@ -675,6 +678,8 @@ function getBadgeClass($kode_jenis) {
                                         <thead>
                                             <tr>
                                                 <th>Waktu</th>
+                                                <th>Tgl Bayar</th>
+                                                <th>Jatuh Tempo</th>
                                                 <th>Anggota</th>
                                                 <th>Angsuran Ke</th>
                                                 <th class="text-end">Jumlah</th>
@@ -684,8 +689,10 @@ function getBadgeClass($kode_jenis) {
                                             <?php foreach ($angsuran as $a): ?>
                                             <tr>
                                                 <td>
-                                                    <small><?php echo date('H:i', strtotime($a['created_at'])); ?></small>
+                                                    <small><?php echo $a['waktu_bayar'] ? date('H:i', strtotime($a['waktu_bayar'])) : '-'; ?></small>
                                                 </td>
+                                                <td><small><?php echo $a['tanggal_bayar'] ? date('d/m/Y', strtotime($a['tanggal_bayar'])) : '-'; ?></small></td>
+                                                <td><small><?php echo date('d/m/Y', strtotime($a['tanggal_jatuh_tempo'])); ?></small></td>
                                                 <td>
                                                     <div class="fw-semibold"><?php echo htmlspecialchars($a['nama_lengkap']); ?></div>
                                                     <small class="text-muted"><?php echo $a['kode_anggota']; ?></small>

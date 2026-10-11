@@ -37,7 +37,17 @@ $hitung = hitungDariPinjaman($b);
 $tanggal_lunas = !empty($b['tanggal_lunas']) ? $b['tanggal_lunas'] : $b['bayar_terakhir'];
 $total_dibayar = (float) $b['total_angsuran_dibayar'] + (float) $b['total_denda'];
 $e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
-$label_petugas = isAdmin() ? 'ADMIN' : 'TELLER';
+// Kolom tanda tangan: Admin (yang menyetujui pengajuan) dan Teller (yang mencairkan; cadangan: teller pencetak)
+$stmt_ttd = $db->prepare("SELECT ua.nama_lengkap AS admin_nama, ut.nama_lengkap AS teller_nama
+                          FROM pinjaman p
+                          LEFT JOIN pengajuan_pinjaman pp ON p.pengajuan_id = pp.id
+                          LEFT JOIN users ua ON pp.admin_id = ua.id
+                          LEFT JOIN users ut ON p.dicairkan_oleh = ut.id
+                          WHERE p.id = ?");
+$stmt_ttd->execute(array($b['id']));
+$ttd = $stmt_ttd->fetch(PDO::FETCH_ASSOC);
+$nama_admin = ($ttd && $ttd['admin_nama']) ? $ttd['admin_nama'] : (isAdmin() ? $_SESSION['nama_lengkap'] : '');
+$nama_teller = ($ttd && $ttd['teller_nama']) ? $ttd['teller_nama'] : (isTeller() ? $_SESSION['nama_lengkap'] : '');
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -112,10 +122,10 @@ $label_petugas = isAdmin() ? 'ADMIN' : 'TELLER';
 
         <div class="ttd-section">
             <div class="ttd-box">
-                <div class="ttd-line"><strong>ANGGOTA</strong><br><?php echo $e($b['nama_lengkap']); ?></div>
+                <div class="ttd-line"><strong>ADMIN</strong><br><?php echo $nama_admin !== '' ? $e($nama_admin) : '&nbsp;'; ?></div>
             </div>
             <div class="ttd-box">
-                <div class="ttd-line"><strong><?php echo $e($label_petugas); ?></strong><br><?php echo $e($_SESSION['nama_lengkap']); ?></div>
+                <div class="ttd-line"><strong>TELLER</strong><br><?php echo $nama_teller !== '' ? $e($nama_teller) : '&nbsp;'; ?></div>
             </div>
         </div>
     </div>

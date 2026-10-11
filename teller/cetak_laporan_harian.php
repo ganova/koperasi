@@ -129,6 +129,9 @@ $query_angsuran = "SELECT a.*,
                           ang.kode_anggota,
                           ang.nama_lengkap, 
                           p.kode_pinjaman,
+                          (SELECT MAX(t.tanggal_transaksi) FROM transaksi t
+                            WHERE t.keterangan = CONCAT('Pembayaran angsuran ke-', a.angsuran_ke, ' - ', p.kode_pinjaman)
+                              AND t.jumlah > 0) AS waktu_bayar,
                           jp.nama_jenis as jenis_pinjaman
                   FROM angsuran a
                   JOIN pinjaman p ON a.pinjaman_id = p.id
@@ -343,28 +346,34 @@ if (empty($angsuran)) {
     // Header tabel
     $pdf->SetFont('helvetica', 'B', 8);
     $pdf->SetFillColor(200, 200, 200);
-    $pdf->Cell(20, 7, 'Waktu', 1, 0, 'C', 1);
-    $pdf->Cell(25, 7, 'Kode', 1, 0, 'C', 1);
-    $pdf->Cell(45, 7, 'Nama Anggota', 1, 0, 'C', 1);
+    $pdf->Cell(13, 7, 'Waktu', 1, 0, 'C', 1);
+    $pdf->Cell(19, 7, 'Tgl Bayar', 1, 0, 'C', 1);
+    $pdf->Cell(19, 7, 'Jatuh Tempo', 1, 0, 'C', 1);
+    $pdf->Cell(20, 7, 'Kode', 1, 0, 'C', 1);
+    $pdf->Cell(34, 7, 'Nama Anggota', 1, 0, 'C', 1);
     $pdf->Cell(25, 7, 'Pinjaman', 1, 0, 'C', 1);
-    $pdf->Cell(15, 7, 'Angs Ke', 1, 0, 'C', 1);
-    $pdf->Cell(35, 7, 'Jumlah', 1, 1, 'C', 1);
-    
+    $pdf->Cell(10, 7, 'Ke', 1, 0, 'C', 1);
+    $pdf->Cell(40, 7, 'Jumlah', 1, 1, 'C', 1);
+
     // Data
     $pdf->SetFont('helvetica', '', 7);
     foreach ($angsuran as $a) {
-        $waktu = date('H:i', strtotime($a['created_at']));
+        $waktu = $a['waktu_bayar'] ? date('H:i', strtotime($a['waktu_bayar'])) : '-';
+        $tgl_bayar = $a['tanggal_bayar'] ? date('d/m/Y', strtotime($a['tanggal_bayar'])) : '-';
+        $tgl_tempo = date('d/m/Y', strtotime($a['tanggal_jatuh_tempo']));
         $jumlah = formatRupiah($a['jumlah_angsuran']);
         if ($a['denda'] > 0) {
             $jumlah .= ' + denda ' . formatRupiah($a['denda']);
         }
         
-        $pdf->Cell(20, 6, $waktu, 1, 0, 'C');
-        $pdf->Cell(25, 6, $a['kode_anggota'], 1, 0, 'L');
-        $pdf->Cell(45, 6, substr($a['nama_lengkap'], 0, 20), 1, 0, 'L');
+        $pdf->Cell(13, 6, $waktu, 1, 0, 'C');
+        $pdf->Cell(19, 6, $tgl_bayar, 1, 0, 'C');
+        $pdf->Cell(19, 6, $tgl_tempo, 1, 0, 'C');
+        $pdf->Cell(20, 6, $a['kode_anggota'], 1, 0, 'L');
+        $pdf->Cell(34, 6, substr($a['nama_lengkap'], 0, 18), 1, 0, 'L');
         $pdf->Cell(25, 6, $a['kode_pinjaman'], 1, 0, 'L');
-        $pdf->Cell(15, 6, $a['angsuran_ke'], 1, 0, 'C');
-        $pdf->Cell(35, 6, $jumlah, 1, 1, 'R');
+        $pdf->Cell(10, 6, $a['angsuran_ke'], 1, 0, 'C');
+        $pdf->Cell(40, 6, $jumlah, 1, 1, 'R');
     }
 }
 $pdf->Ln(5);

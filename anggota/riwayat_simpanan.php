@@ -227,10 +227,7 @@ function formatRupiah($angka) {
                         <i class="fas fa-history me-2"></i>Riwayat Simpanan
                     </h1>
                     <div class="btn-toolbar mb-2 mb-md-0">
-                        <a href="cetak_buku.php?action=pdf&jenis_simpanan=<?php echo $filter_jenis; ?>" 
-                           class="btn btn-sm btn-pdf me-2" target="_blank">
-                            <i class="fas fa-file-pdf me-1"></i> Download Buku Tabungan PDF
-                        </a>
+
                     </div>
                 </div>
 
