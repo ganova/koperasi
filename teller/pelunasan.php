@@ -40,7 +40,9 @@ if ($_POST) {
             
             if ($stmt_update->execute()) {
                 // Mark all remaining installments as paid
-                $query_angsuran = "UPDATE angsuran SET status = 'lunas', tanggal_bayar = NOW() 
+                // cara_bayar (migrasi 2026_10b) menandai cicilan ini lunas lewat pelunasan dini
+                $set_cara = kolomAda($db, 'angsuran', 'cara_bayar') ? ", cara_bayar = 'pelunasan'" : '';
+                $query_angsuran = "UPDATE angsuran SET status = 'lunas', tanggal_bayar = NOW()" . $set_cara . " 
                                   WHERE pinjaman_id = :pinjaman_id AND status IN ('belum_bayar', 'telat')";
                 $stmt_angsuran = $db->prepare($query_angsuran);
                 $stmt_angsuran->bindParam(':pinjaman_id', $id);

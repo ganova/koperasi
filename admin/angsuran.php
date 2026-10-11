@@ -530,6 +530,11 @@ function formatRupiah($angka) {
                                                         <span class="text-muted">
                                                             <i class="fas fa-check-circle text-success"></i> Lunas
                                                         </span>
+                                                        <a class="btn btn-sm btn-outline-secondary ms-1" target="_blank" rel="noopener"
+                                                           href="cetak_bukti_angsuran.php?id=<?php echo (int) $angsuran['id']; ?>"
+                                                           title="Cetak Bukti Pembayaran">
+                                                            <i class="fas fa-print"></i>
+                                                        </a>
                                                     <?php endif; ?>
                                                 </td>
                                             </tr>

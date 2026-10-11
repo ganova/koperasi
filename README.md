@@ -24,6 +24,10 @@ Aplikasi koperasi simpan pinjam (PHP + MySQL) dengan 3 level login: Admin, Telle
    mysql -u root koperasi_db < database/migrations/2026_10_revisi_koperasi.sql
    ```
    Untuk database yang sudah berisi data, **backup dulu** sebelum menjalankan migrasi.
+   Lalu jalankan migrasi tambahan (penanda pelunasan untuk Bukti Pembayaran Angsuran), juga **sekali saja**:
+   ```bash
+   mysql -u root koperasi_db < database/migrations/2026_10b_cara_bayar_angsuran.sql
+   ```
 4. Sesuaikan koneksi database di `config/database.php` bila user/password MySQL berbeda.
 5. Atur `php.ini` lalu restart Apache:
    ```ini

@@ -21,6 +21,25 @@ if (!function_exists('tanggalAtauNull')) {
     }
 }
 
+if (!function_exists('buatKodeAnggota')) {
+    /**
+     * Kode anggota berikutnya: AGT + nomor urut 4 digit, dari nomor TERBESAR yang ada
+     * (bukan jumlah baris, supaya tidak bentrok setelah ada anggota yang dihapus).
+     */
+    function buatKodeAnggota($db) {
+        $max = (int) $db->query("SELECT COALESCE(MAX(CAST(SUBSTRING(kode_anggota, 4) AS UNSIGNED)), 0)
+                                 FROM anggota WHERE kode_anggota REGEXP '^AGT[0-9]+$'")->fetchColumn();
+        $cek = $db->prepare("SELECT (SELECT COUNT(*) FROM anggota WHERE kode_anggota = :k1)
+                                  + (SELECT COUNT(*) FROM users WHERE username = :k2)");
+        do {
+            $max++;
+            $kode = 'AGT' . str_pad($max, 4, '0', STR_PAD_LEFT);
+            $cek->execute([':k1' => $kode, ':k2' => $kode]);
+        } while ((int) $cek->fetchColumn() > 0);
+        return $kode;
+    }
+}
+
 if (!function_exists('riwayatAnggota')) {
     /** @return array label => jumlah baris terkait yang mencegah penghapusan */
     function riwayatAnggota($db, $anggota_id) {

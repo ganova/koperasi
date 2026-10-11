@@ -8,18 +8,8 @@ if ($_SESSION['role'] !== 'teller') {
     exit();
 }
 
-// Function generate kode anggota
-function generateKodeAnggota() {
-    global $db;
-    $query = "SELECT COUNT(*) as total FROM anggota";
-    $stmt = $db->prepare($query);
-    $stmt->execute();
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
-    $number = $result['total'] + 1;
-    return 'AGT' . str_pad($number, 4, '0', STR_PAD_LEFT);
-}
-
-$kode_otomatis = generateKodeAnggota();
+// Kode anggota otomatis (nomor terbesar + 1, lihat includes/anggota_helper.php)
+$kode_otomatis = buatKodeAnggota($db);
 
 // Upload melebihi post_max_size membuat $_POST kosong; tampilkan pesan yang jelas
 cekPostMelebihiBatas();
@@ -27,7 +17,7 @@ cekPostMelebihiBatas();
 // Handle tambah anggota
 if ($_POST) {
     if (isset($_POST['tambah_anggota'])) {
-        $kode_anggota = $_POST['kode_anggota'];
+        $kode_anggota = buatKodeAnggota($db); // dibuat server, kiriman form diabaikan
         $nama_lengkap = $_POST['nama_lengkap'];
         $alamat = $_POST['alamat'] ?? '';
         $telepon = $_POST['telepon'] ?? '';

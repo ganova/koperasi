@@ -253,3 +253,37 @@ if (!function_exists('buatPinjamanDanJadwal')) {
         return $pinjaman_id;
     }
 }
+
+if (!function_exists('terbilang')) {
+    /** Angka -> kata, mis. 2550000 => "dua juta lima ratus lima puluh ribu". */
+    function terbilang($x) {
+        $x = (int) abs(round($x));
+        $satuan = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
+        if ($x < 12) return $satuan[$x];
+        if ($x < 20) return terbilang($x - 10) . ' belas';
+        if ($x < 100) return terbilang(intdiv($x, 10)) . ' puluh' . ($x % 10 ? ' ' . terbilang($x % 10) : '');
+        if ($x < 200) return 'seratus' . ($x - 100 ? ' ' . terbilang($x - 100) : '');
+        if ($x < 1000) return terbilang(intdiv($x, 100)) . ' ratus' . ($x % 100 ? ' ' . terbilang($x % 100) : '');
+        if ($x < 2000) return 'seribu' . ($x - 1000 ? ' ' . terbilang($x - 1000) : '');
+        if ($x < 1000000) return terbilang(intdiv($x, 1000)) . ' ribu' . ($x % 1000 ? ' ' . terbilang($x % 1000) : '');
+        if ($x < 1000000000) return terbilang(intdiv($x, 1000000)) . ' juta' . ($x % 1000000 ? ' ' . terbilang($x % 1000000) : '');
+        if ($x < 1000000000000) return terbilang(intdiv($x, 1000000000)) . ' miliar' . ($x % 1000000000 ? ' ' . terbilang($x % 1000000000) : '');
+        return terbilang(intdiv($x, 1000000000000)) . ' triliun' . ($x % 1000000000000 ? ' ' . terbilang($x % 1000000000000) : '');
+    }
+}
+
+if (!function_exists('terbilangRupiah')) {
+    function terbilangRupiah($x) {
+        $kata = (int) round($x) === 0 ? 'nol' : terbilang($x);
+        return ucfirst($kata) . ' rupiah';
+    }
+}
+
+if (!function_exists('kolomAda')) {
+    function kolomAda($db, $tabel, $kolom) {
+        $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS
+                              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+        $stmt->execute([$tabel, $kolom]);
+        return (int) $stmt->fetchColumn() > 0;
+    }
+}

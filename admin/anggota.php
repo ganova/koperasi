@@ -5,14 +5,18 @@ require_once '../config/config.php';
 // Upload melebihi post_max_size membuat $_POST kosong; tampilkan pesan yang jelas
 cekPostMelebihiBatas();
 
+// Kode anggota berikutnya untuk form tambah
+$kode_otomatis = buatKodeAnggota($db);
+
 // Handle form actions
 if ($_POST) {
     if (isset($_POST['add'])) {
-        $kode_anggota = trim($_POST['kode_anggota']);
+        // Kode dibuat server (kiriman form diabaikan agar tidak bisa bentrok/diubah)
+        $kode_anggota = buatKodeAnggota($db);
         $nama_lengkap = trim($_POST['nama_lengkap']);
         $alamat = trim($_POST['alamat']);
         $telepon = trim($_POST['telepon']);
-        $email = trim($_POST['email']);
+        $email = ''; // form tambah tidak memakai email
         $tempat_lahir = trim($_POST['tempat_lahir']);
         $tanggal_lahir = tanggalAtauNull(isset($_POST['tanggal_lahir']) ? $_POST['tanggal_lahir'] : '');
         $jenis_kelamin = $_POST['jenis_kelamin'];
@@ -603,6 +607,16 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             overflow: hidden;
         }
         
+        /* Form berada di antara .modal-content dan body/footer: tanpa ini footer (tombol
+           Simpan/Update) terpotong saat isi modal tinggi di modal-dialog-scrollable */
+        .modal-dialog-scrollable .modal-content > form {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            max-height: 100%;
+            overflow: hidden;
+        }
+        
         .modal-header {
             background: linear-gradient(135deg, #2c3e50, #3498db);
             color: white;
@@ -977,9 +991,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">Kode Anggota <span class="text-danger">*</span></label>
-                                    <input type="text" name="kode_anggota" class="form-control" required
-                                           placeholder="Contoh: AGT001">
-                                    <small class="text-muted">Kode unik untuk identifikasi</small>
+                                    <input type="text" name="kode_anggota" id="add_kode" class="form-control" required readonly
+                                           value="<?php echo htmlspecialchars($kode_otomatis); ?>">
+                                    <small class="text-muted">Dibuat otomatis oleh sistem</small>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Nama Lengkap <span class="text-danger">*</span></label>
@@ -992,10 +1006,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                 <div class="mb-3">
                                     <label class="form-label">Telepon</label>
                                     <input type="tel" name="telepon" class="form-control" placeholder="08xxxxxxxxxx">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" name="email" class="form-control" placeholder="email@example.com">
                                 </div>
                             </div>
                             <div class="col-md-6">
