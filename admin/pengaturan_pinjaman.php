@@ -2,6 +2,13 @@
 require_once '../includes/auth.php';
 require_once '../config/config.php';
 
+// Hanya Admin
+if (!isAdmin()) {
+    $_SESSION['error'] = "Anda tidak memiliki akses ke halaman ini";
+    header('Location: ../dashboard.php');
+    exit();
+}
+
 // Handle form actions
 if ($_POST) {
     if (isset($_POST['update_bagi_hasil'])) {
@@ -15,21 +22,53 @@ if ($_POST) {
         $_SESSION['success'] = "Bagi hasil berhasil diupdate";
     }
     
-    if (isset($_POST['update_denda'])) {
-        $denda_keterlambatan = $_POST['denda_keterlambatan'];
-        $persentase_denda = $_POST['persentase_denda'];
-        
-        // Simpan ke tabel settings (buat tabel jika belum ada)
-        $query = "INSERT INTO settings (setting_key, setting_value) 
-                  VALUES ('denda_keterlambatan', :denda_keterlambatan),
-                         ('persentase_denda', :persentase_denda)
-                  ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)";
-        $stmt = $db->prepare($query);
-        $stmt->bindParam(':denda_keterlambatan', $denda_keterlambatan);
-        $stmt->bindParam(':persentase_denda', $persentase_denda);
-        $stmt->execute();
-        
-        $_SESSION['success'] = "Pengaturan denda berhasil diupdate";
+    // Tarif denda nominal per hari menurut besar pinjaman (dipakai perhitungan denda otomatis)
+    if (isset($_POST['simpan_tarif_denda'])) {
+        $errmode = $db->getAttribute(PDO::ATTR_ERRMODE);
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        try {
+            $jumlah = isset($_POST['tarif_jumlah']) ? (array) $_POST['tarif_jumlah'] : [];
+            $denda = isset($_POST['tarif_denda']) ? (array) $_POST['tarif_denda'] : [];
+            $baris = [];
+            foreach ($jumlah as $i => $j) {
+                $j = trim($j);
+                $d = isset($denda[$i]) ? trim($denda[$i]) : '';
+                if ($j === '' && $d === '') {
+                    continue;
+                }
+                $j = parseRupiah($j);
+                $d = parseRupiah($d);
+                if ($j === false || $d === false || (float) $j <= 0) {
+                    throw new Exception("Jumlah pinjaman dan denda per hari harus berupa angka rupiah penuh lebih dari 0");
+                }
+                if (isset($baris[$j])) {
+                    throw new Exception("Jumlah pinjaman " . number_format($j, 0, ',', '.') . " diisi lebih dari sekali");
+                }
+                $baris[$j] = $d;
+            }
+            if (empty($baris)) {
+                throw new Exception("Isi minimal satu tarif denda");
+            }
+            $db->beginTransaction();
+            $db->exec("DELETE FROM denda_tarif");
+            $ins = $db->prepare("INSERT INTO denda_tarif (jumlah_pinjaman, denda_per_hari) VALUES (?, ?)");
+            foreach ($baris as $j => $d) {
+                $ins->execute([$j, $d]);
+            }
+            $db->commit();
+            // Hitung ulang denda cicilan terlambat (kecuali yang manual) dengan tarif baru
+            $diperbarui = perbaruiDendaOtomatis($db, true);
+            $_SESSION['success'] = "Tarif denda disimpan. $diperbarui angsuran terlambat dihitung ulang.";
+        } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            $_SESSION['error'] = "Gagal menyimpan tarif denda: " . htmlspecialchars($e->getMessage())
+                . (migrasiRevisiBelumDijalankan($db) ? " (database belum di-update, jalankan file migrasi)" : "");
+        }
+        $db->setAttribute(PDO::ATTR_ERRMODE, $errmode);
+        header("Location: pengaturan_pinjaman.php");
+        exit();
     }
 }
 
@@ -39,11 +78,12 @@ $stmt_jenis = $db->prepare($query_jenis);
 $stmt_jenis->execute();
 $jenis_simpanan = $stmt_jenis->fetchAll(PDO::FETCH_ASSOC);
 
-// Get pengaturan denda
-$query_denda = "SELECT * FROM settings WHERE setting_key IN ('denda_keterlambatan', 'persentase_denda')";
-$stmt_denda = $db->prepare($query_denda);
-$stmt_denda->execute();
-$settings = $stmt_denda->fetchAll(PDO::FETCH_KEY_PAIR);
+// Tarif denda per hari
+$tarif_denda = [];
+$stmt_tarif = $db->query("SELECT jumlah_pinjaman, denda_per_hari FROM denda_tarif ORDER BY jumlah_pinjaman");
+if ($stmt_tarif) {
+    $tarif_denda = $stmt_tarif->fetchAll(PDO::FETCH_ASSOC);
+}
 
 // Create settings table if not exists
 $db->exec("CREATE TABLE IF NOT EXISTS settings (
@@ -79,6 +119,9 @@ $db->exec("CREATE TABLE IF NOT EXISTS settings (
 
                 <?php if (isset($_SESSION['success'])): ?>
                     <div class="alert alert-success"><?php echo $_SESSION['success']; unset($_SESSION['success']); ?></div>
+                <?php endif; ?>
+                <?php if (isset($_SESSION['error'])): ?>
+                    <div class="alert alert-danger"><?php echo $_SESSION['error']; unset($_SESSION['error']); ?></div>
                 <?php endif; ?>
 
                 <div class="row">
@@ -123,33 +166,41 @@ $db->exec("CREATE TABLE IF NOT EXISTS settings (
                         </div>
                     </div>
 
-                    <!-- Pengaturan Denda -->
+                    <!-- Tarif Denda per Hari -->
                     <div class="col-md-6 mb-4">
                         <div class="card">
                             <div class="card-header bg-warning text-dark">
                                 <h5 class="card-title mb-0">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>Pengaturan Denda
+                                    <i class="fas fa-exclamation-triangle me-2"></i>Tarif Denda per Hari
                                 </h5>
                             </div>
                             <div class="card-body">
-                                <form method="POST">
-                                    <div class="mb-3">
-                                        <label class="form-label">Denda Keterlambatan (Rp)</label>
-                                        <input type="number" name="denda_keterlambatan" class="form-control" 
-                                               value="<?php echo $settings['denda_keterlambatan'] ?? 0; ?>" 
-                                               step="1000" min="0">
-                                        <small class="text-muted">Jumlah denda tetap untuk keterlambatan pembayaran</small>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Persentase Denda (%)</label>
-                                        <input type="number" name="persentase_denda" class="form-control" 
-                                               value="<?php echo $settings['persentase_denda'] ?? 0; ?>" 
-                                               step="0.01" min="0" max="100">
-                                        <small class="text-muted">Persentase denda dari jumlah pinjaman</small>
-                                    </div>
+                                <form method="POST" id="formTarifDenda">
+                                    <table class="table table-sm align-middle mb-2">
+                                        <thead>
+                                            <tr><th>Jumlah Pinjaman (Rp)</th><th>Denda per Hari (Rp)</th><th></th></tr>
+                                        </thead>
+                                        <tbody id="tarifDendaRows">
+                                            <?php foreach ($tarif_denda as $t): ?>
+                                            <tr>
+                                                <td><input type="number" name="tarif_jumlah[]" class="form-control form-control-sm" min="1" step="1" required value="<?php echo (int) $t['jumlah_pinjaman']; ?>"></td>
+                                                <td><input type="number" name="tarif_denda[]" class="form-control form-control-sm" min="1" step="1" required value="<?php echo (int) $t['denda_per_hari']; ?>"></td>
+                                                <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="hapusBarisDenda(this)"><i class="fas fa-times"></i></button></td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                    <button type="button" class="btn btn-sm btn-outline-primary mb-3" onclick="tambahBarisDenda()">
+                                        <i class="fas fa-plus me-1"></i> Tambah Tingkat
+                                    </button>
+                                    <small class="text-muted d-block mb-3">
+                                        Denda dihitung <strong>per hari</strong> mulai sehari setelah jatuh tempo, sampai jatuh tempo
+                                        cicilan berikutnya. Pinjaman di antara dua tingkat memakai tingkat di bawahnya.
+                                        Denda yang diinput manual tidak berubah.
+                                    </small>
                                     <div class="text-end">
-                                        <button type="submit" name="update_denda" class="btn btn-warning">
-                                            <i class="fas fa-save me-1"></i> Update Denda
+                                        <button type="submit" name="simpan_tarif_denda" class="btn btn-warning">
+                                            <i class="fas fa-save me-1"></i> Simpan Tarif Denda
                                         </button>
                                     </div>
                                 </form>
@@ -180,9 +231,9 @@ $db->exec("CREATE TABLE IF NOT EXISTS settings (
                                     <div class="col-md-6">
                                         <h6>Ketentuan Denda:</h6>
                                         <ul>
-                                            <li>Denda berlaku untuk keterlambatan > 7 hari</li>
-                                            <li>Perhitungan denda harian</li>
-                                            <li>Maksimal denda 30% dari pokok pinjaman</li>
+                                            <li>Denda nominal tetap per hari menurut besar pinjaman (lihat Tarif Denda per Hari)</li>
+                                            <li>Dihitung mulai sehari setelah jatuh tempo sampai jatuh tempo cicilan berikutnya</li>
+                                            <li>Otomatis tiap hari; petugas bisa mengisi manual saat pembayaran</li>
                                         </ul>
                                     </div>
                                 </div>
@@ -195,5 +246,20 @@ $db->exec("CREATE TABLE IF NOT EXISTS settings (
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function tambahBarisDenda() {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><input type="number" name="tarif_jumlah[]" class="form-control form-control-sm" min="1" step="1" required></td>' +
+                   '<td><input type="number" name="tarif_denda[]" class="form-control form-control-sm" min="1" step="1" required></td>' +
+                   '<td><button type="button" class="btn btn-sm btn-outline-danger" onclick="hapusBarisDenda(this)"><i class="fas fa-times"></i></button></td>';
+    document.getElementById('tarifDendaRows').appendChild(tr);
+}
+function hapusBarisDenda(btn) {
+    var tbody = document.getElementById('tarifDendaRows');
+    if (tbody.rows.length > 1) {
+        btn.closest('tr').remove();
+    }
+}
+</script>
 </body>
 </html>

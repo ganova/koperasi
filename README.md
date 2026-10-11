@@ -32,6 +32,10 @@ Aplikasi koperasi simpan pinjam (PHP + MySQL) dengan 3 level login: Admin, Telle
    ```bash
    mysql -u root koperasi_db < database/migrations/2026_10_revisi_tahap2.sql
    ```
+   Terakhir, migrasi **denda otomatis**, juga **sekali saja**:
+   ```bash
+   mysql -u root koperasi_db < database/migrations/2026_10c_denda.sql
+   ```
 4. Sesuaikan koneksi database di `config/database.php` bila user/password MySQL berbeda.
 5. Atur `php.ini` lalu restart Apache:
    ```ini
@@ -53,6 +57,12 @@ tidak tersimpan. Jalankan migrasinya sekali (bisa juga lewat phpMyAdmin → data
 
 - Jenis pinjaman lama (Umum, Pendidikan, Usaha, Mendesak) perlu diisi **tarif bunga flat per tenor** di menu Admin → Jenis Pinjaman sebelum bisa dipakai di form pengajuan.
 - Anggota baru yang ditambahkan Teller mendapat akun login dengan password awal `123456`.
+
+## Denda keterlambatan
+
+Denda nominal **per hari** menurut besar pinjaman (default: Rp 1 jt = 1.500, Rp 2 jt = 2.500, Rp 3 jt = 3.500;
+bisa diatur Admin di Pengaturan Pinjaman). Dihitung mulai sehari setelah jatuh tempo sampai jatuh tempo cicilan
+berikutnya, otomatis sekali sehari. Saat pembayaran angka denda bisa diubah manual (denda manual tidak ditimpa).
 
 ## Alur pinjaman (sejak tahap 2)
 

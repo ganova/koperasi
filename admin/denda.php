@@ -23,22 +23,40 @@ if (!isAdmin()) {
 
 $page_title = "Denda & Keterlambatan";
 
+// Denda otomatis (sekali sehari); denda manual tidak ditimpa
+perbaruiDendaOtomatis($db);
+
 // Handle fine update
 if ($_POST) {
     if (isset($_POST['update_denda'])) {
-        $id = $_POST['id'];
-        $denda = $_POST['denda'];
-        
+        $id = (int) $_POST['id'];
+        $input = isset($_POST['denda']) ? trim($_POST['denda']) : '';
+
         try {
-            $query = "UPDATE angsuran SET denda = :denda WHERE id = :id";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':id', $id);
-            $stmt->bindParam(':denda', $denda);
-            
-            if ($stmt->execute()) {
-                $_SESSION['success'] = "Denda berhasil diperbarui";
+            $stmt = $db->prepare("SELECT a.*, p.jumlah_pinjaman FROM angsuran a
+                                  JOIN pinjaman p ON a.pinjaman_id = p.id
+                                  WHERE a.id = ? AND a.status <> 'lunas'");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                throw new Exception("Angsuran tidak ditemukan atau sudah lunas");
+            }
+            $punya_flag = kolomAda($db, 'angsuran', 'denda_manual');
+
+            if ($input === '') {
+                // Kosong = kembali ke hitungan otomatis
+                $d = hitungDendaAngsuran($db, $row, $row['jumlah_pinjaman']);
+                $set = "denda = ?, keterlambatan_hari = ?" . ($punya_flag ? ", denda_manual = 0" : '')
+                     . ($d['hari_telat'] > 0 ? ", status = 'telat'" : '');
+                $db->prepare("UPDATE angsuran SET $set WHERE id = ?")->execute([$d['denda'], $d['hari_telat'], $id]);
+                $_SESSION['success'] = "Denda dikembalikan ke hitungan otomatis (Rp " . number_format($d['denda'], 0, ',', '.') . ")";
             } else {
-                throw new Exception("Gagal mengupdate denda");
+                if (!is_numeric($input) || (float) $input < 0) {
+                    throw new Exception("Denda harus berupa angka 0 atau lebih");
+                }
+                $set = "denda = ?" . ($punya_flag ? ", denda_manual = 1" : '');
+                $db->prepare("UPDATE angsuran SET $set WHERE id = ?")->execute([(float) $input, $id]);
+                $_SESSION['success'] = "Denda diatur manual (Rp " . number_format((float) $input, 0, ',', '.') . ")";
             }
         } catch (Exception $e) {
             $_SESSION['error'] = "Gagal mengupdate denda: " . $e->getMessage();
@@ -47,7 +65,7 @@ if ($_POST) {
 }
 
 // Get late installments - PERBAIKAN: Ambil semua angsuran yang memiliki denda atau telat
-$query = "SELECT a.*, p.kode_pinjaman, p.anggota_id, ag.nama_lengkap, ag.kode_anggota,
+$query = "SELECT a.*, p.kode_pinjaman, p.anggota_id, p.jumlah_pinjaman, ag.nama_lengkap, ag.kode_anggota,
                  DATEDIFF(CURDATE(), a.tanggal_jatuh_tempo) as hari_keterlambatan,
                  jp.nama_jenis,
                  (a.jumlah_angsuran + COALESCE(a.denda, 0)) as total_bayar
@@ -76,61 +94,12 @@ $stmt_stats = $db->prepare($query_stats);
 $stmt_stats->execute();
 $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
 
-// PERBAIKAN: Hitung denda otomatis berdasarkan keterlambatan
-function hitungDendaOtomatis($hari_keterlambatan, $jumlah_angsuran) {
-    if ($hari_keterlambatan <= 0) {
-        return 0;
-    }
-    
-    // Rumus denda: 2% dari angsuran per bulan (0.067% per hari)
-    $denda_per_hari = $jumlah_angsuran * 0.00067;
-    $denda = $denda_per_hari * $hari_keterlambatan;
-    
-    // Maksimal denda 10% dari jumlah angsuran
-    $maksimal_denda = $jumlah_angsuran * 0.1;
-    
-    return min($denda, $maksimal_denda);
-}
-
-// PERBAIKAN: Update denda otomatis untuk angsuran yang telat
+// Hitung ulang SEMUA denda otomatis sekarang (kecuali yang diinput manual)
 if (isset($_GET['update_auto_denda'])) {
-    try {
-        $db->beginTransaction();
-        
-        // Ambil semua angsuran yang telat dan belum ada denda
-        $query_auto = "SELECT id, jumlah_angsuran, tanggal_jatuh_tempo, denda 
-                      FROM angsuran 
-                      WHERE status IN ('belum_bayar', 'telat') 
-                      AND tanggal_jatuh_tempo < CURDATE() 
-                      AND (denda = 0 OR denda IS NULL)";
-        $stmt_auto = $db->prepare($query_auto);
-        $stmt_auto->execute();
-        $angsuran_telat = $stmt_auto->fetchAll(PDO::FETCH_ASSOC);
-        
-        $updated_count = 0;
-        foreach ($angsuran_telat as $angsuran) {
-            $hari_keterlambatan = floor((time() - strtotime($angsuran['tanggal_jatuh_tempo'])) / (60 * 60 * 24));
-            $denda_otomatis = hitungDendaOtomatis($hari_keterlambatan, $angsuran['jumlah_angsuran']);
-            
-            if ($denda_otomatis > 0) {
-                $query_update = "UPDATE angsuran SET denda = :denda, status = 'telat' WHERE id = :id";
-                $stmt_update = $db->prepare($query_update);
-                $stmt_update->bindParam(':denda', $denda_otomatis);
-                $stmt_update->bindParam(':id', $angsuran['id']);
-                $stmt_update->execute();
-                $updated_count++;
-            }
-        }
-        
-        $db->commit();
-        $_SESSION['success'] = "Denda otomatis berhasil diupdate untuk " . $updated_count . " angsuran";
-        header("Location: denda.php");
-        exit();
-        
-    } catch (Exception $e) {
-        $db->rollBack();
-        $_SESSION['error'] = "Gagal update denda otomatis: " . $e->getMessage();
-    }
+    $jumlah = perbaruiDendaOtomatis($db, true);
+    $_SESSION['success'] = "Denda otomatis dihitung ulang: " . $jumlah . " angsuran diperbarui (denda manual tidak diubah)";
+    header("Location: denda.php");
+    exit();
 }
 ?>
 <!DOCTYPE html>
@@ -382,6 +351,10 @@ if (isset($_GET['update_auto_denda'])) {
                                                 <i class="fas fa-eye"></i>
                                             </button>
 
+                                            <?php
+                                            $d_auto = hitungDendaAngsuran($db, $keterlambatan, $keterlambatan['jumlah_pinjaman']);
+                                            $d_info = 'Otomatis: Rp ' . number_format($d_auto['per_hari'], 0, ',', '.') . '/hari x ' . $d_auto['hari_dihitung'] . ' hari = Rp ' . number_format($d_auto['denda'], 0, ',', '.');
+                                            ?>
                                             <!-- Update Denda Button -->
                                             <button class="btn btn-sm btn-warning btn-action" data-bs-toggle="modal" 
                                                     data-bs-target="#dendaModal" 
@@ -391,6 +364,9 @@ if (isset($_GET['update_auto_denda'])) {
                                                     data-angsuran_ke="<?php echo $keterlambatan['angsuran_ke']; ?>"
                                                     data-keterlambatan="<?php echo $keterlambatan['hari_keterlambatan']; ?>"
                                                     data-denda="<?php echo $keterlambatan['denda']; ?>"
+                                                    data-denda_otomatis="<?php echo $d_auto['denda']; ?>"
+                                                    data-denda_info="<?php echo htmlspecialchars($d_info); ?>"
+                                                    data-manual="<?php echo !empty($keterlambatan['denda_manual']) ? 1 : 0; ?>"
                                                     data-jumlah_angsuran="<?php echo $keterlambatan['jumlah_angsuran']; ?>"
                                                     title="Atur Denda">
                                                 <i class="fas fa-edit"></i>
@@ -513,10 +489,12 @@ if (isset($_GET['update_auto_denda'])) {
                         
                         <div class="mb-3">
                             <label for="denda_jumlah" class="form-label">Jumlah Denda</label>
-                            <input type="number" class="form-control" id="denda_jumlah" name="denda" min="0" step="1000" required>
+                            <input type="number" class="form-control" id="denda_jumlah" name="denda" min="0" step="1" placeholder="Kosongkan untuk otomatis">
                             <div class="form-text">
                                 Denda otomatis: <span id="denda_otomatis" class="text-info"></span>
+                                <span id="denda_status_manual" class="badge bg-warning text-dark ms-1 d-none">diatur manual</span>
                             </div>
+                            <div class="form-text">Isi angka untuk denda manual; kosongkan lalu simpan untuk kembali ke hitungan otomatis.</div>
                         </div>
                         
                         <div class="alert alert-info">
@@ -585,28 +563,10 @@ if (isset($_GET['update_auto_denda'])) {
             document.getElementById('denda_jumlah_angsuran').textContent = 'Rp ' + Number(button.getAttribute('data-jumlah_angsuran')).toLocaleString('id-ID');
             document.getElementById('denda_jumlah').value = button.getAttribute('data-denda');
             
-            // Hitung denda otomatis
-            var keterlambatan = parseInt(button.getAttribute('data-keterlambatan'));
-            var jumlahAngsuran = parseFloat(button.getAttribute('data-jumlah_angsuran'));
-            var dendaOtomatis = hitungDendaOtomatis(keterlambatan, jumlahAngsuran);
-            document.getElementById('denda_otomatis').textContent = 'Rp ' + dendaOtomatis.toLocaleString('id-ID');
+            // Denda otomatis dihitung server (tarif per hari menurut besar pinjaman)
+            document.getElementById('denda_otomatis').textContent = button.getAttribute('data-denda_info');
+            document.getElementById('denda_status_manual').classList.toggle('d-none', button.getAttribute('data-manual') !== '1');
         });
-
-        // Fungsi hitung denda otomatis (sama dengan PHP)
-        function hitungDendaOtomatis(hari_keterlambatan, jumlah_angsuran) {
-            if (hari_keterlambatan <= 0) {
-                return 0;
-            }
-            
-            // Rumus denda: 2% dari angsuran per bulan (0.067% per hari)
-            var denda_per_hari = jumlah_angsuran * 0.00067;
-            var denda = denda_per_hari * hari_keterlambatan;
-            
-            // Maksimal denda 10% dari jumlah angsuran
-            var maksimal_denda = jumlah_angsuran * 0.1;
-            
-            return Math.min(denda, maksimal_denda);
-        }
 
         // Auto close alerts after 5 seconds
         setTimeout(function() {

@@ -89,6 +89,13 @@ try {
     <!-- Tidak ada dropdown user profile -->
 
 </nav>
+<?php
+// Denda otomatis: dihitung ulang paling banyak sekali sehari saat petugas membuka halaman apa pun
+if (isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'teller'], true)
+    && function_exists('perbaruiDendaOtomatis')) {
+    perbaruiDendaOtomatis($db);
+}
+?>
 <?php if (isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'teller'], true)
           && function_exists('migrasiRevisiBelumDijalankan') && migrasiRevisiBelumDijalankan($db)): ?>
 <div class="alert alert-danger mb-0 rounded-0 shadow" style="position:fixed;left:0;right:0;bottom:0;z-index:2000;">

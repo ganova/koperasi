@@ -132,6 +132,7 @@ if (!function_exists('migrasiRevisiBelumDijalankan')) {
                 ['anggota', 'foto_ktp_pasangan'], ['jenis_pinjaman_tarif', 'tenor_bulan'],
                 ['angsuran', 'cara_bayar'], ['pinjaman', 'foto_pencairan'],
                 ['pinjaman', 'tanggal_lunas'], ['users', 'foto_profil'],
+                ['angsuran', 'denda_manual'], ['denda_tarif', 'denda_per_hari'],
             ];
             $ada = 0;
             $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS

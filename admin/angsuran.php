@@ -23,11 +23,17 @@ if (!isAdmin() && !isTeller()) {
 
 $page_title = "Pembayaran Angsuran";
 
+// Denda otomatis (sekali sehari); denda yang diinput manual tidak ditimpa
+perbaruiDendaOtomatis($db);
+
 // Handle payment
 if ($_POST) {
     if (isset($_POST['bayar'])) {
         $id = $_POST['id'];
-        $denda = $_POST['denda'] ?? 0;
+        // Denda: kosong = otomatis (tarif per hari x hari terlambat); diisi = manual
+        $denda_input = isset($_POST['denda']) ? trim($_POST['denda']) : '';
+        $denda = 0;
+        $denda_manual = 0;
         $user_id = $_SESSION['user_id'];
         
         try {
@@ -46,9 +52,24 @@ if ($_POST) {
             if (!$angsuran_data) {
                 throw new Exception("Data angsuran tidak ditemukan");
             }
+            if ($angsuran_data['status'] === 'lunas') {
+                throw new Exception("Angsuran ini sudah dibayar");
+            }
+
+            // Hitung denda otomatis; nilai berbeda dari hitungan = manual
+            $denda_auto = hitungDendaAngsuran($db, $angsuran_data, $angsuran_data['jumlah_pinjaman']);
+            if ($denda_input === '') {
+                $denda = $denda_auto['denda'];
+            } elseif (is_numeric($denda_input) && (float) $denda_input >= 0) {
+                $denda = (float) $denda_input;
+            } else {
+                throw new Exception("Denda harus berupa angka 0 atau lebih");
+            }
+            $denda_manual = abs($denda - $denda_auto['denda']) > 0.5 ? 1 : 0;
             
             // Update angsuran
-            $query = "UPDATE angsuran SET tanggal_bayar = CURDATE(), status = 'lunas', denda = :denda WHERE id = :id";
+            $set_manual = kolomAda($db, 'angsuran', 'denda_manual') ? ", denda_manual = " . (int) $denda_manual : '';
+            $query = "UPDATE angsuran SET tanggal_bayar = CURDATE(), status = 'lunas', denda = :denda" . $set_manual . " WHERE id = :id";
             $stmt = $db->prepare($query);
             $stmt->bindParam(':id', $id);
             $stmt->bindParam(':denda', $denda);
@@ -221,7 +242,7 @@ $pinjaman_list = $stmt_pinjaman->fetchAll(PDO::FETCH_ASSOC);
 // Get installments for selected loan
 $angsuran_list = [];
 if (isset($_GET['pinjaman_id'])) {
-    $query_angsuran = "SELECT a.*, p.kode_pinjaman 
+    $query_angsuran = "SELECT a.*, p.kode_pinjaman, p.jumlah_pinjaman
                        FROM angsuran a
                        JOIN pinjaman p ON a.pinjaman_id = p.id
                        WHERE a.pinjaman_id = :pinjaman_id
@@ -527,13 +548,20 @@ function formatRupiah($angka) {
                                                     <?php endif; ?>
                                                 </td>
                                                 <td class="table-actions">
-                                                    <?php if ($angsuran['status'] != 'lunas'): ?>
+                                                    <?php if ($angsuran['status'] != 'lunas'):
+                                                        $d_auto = hitungDendaAngsuran($db, $angsuran, $angsuran['jumlah_pinjaman']);
+                                                        $d_nilai = !empty($angsuran['denda_manual']) ? $angsuran['denda'] : $d_auto['denda'];
+                                                        $d_info = $d_auto['hari_dihitung'] > 0
+                                                            ? 'Otomatis: Rp ' . number_format($d_auto['per_hari'], 0, ',', '.') . '/hari x ' . $d_auto['hari_dihitung'] . ' hari terlambat = Rp ' . number_format($d_auto['denda'], 0, ',', '.')
+                                                            : 'Belum terlambat, denda otomatis Rp 0';
+                                                    ?>
                                                         <button class="btn btn-sm btn-success" data-bs-toggle="modal" 
                                                                 data-bs-target="#bayarModal" 
                                                                 data-id="<?php echo $angsuran['id']; ?>"
                                                                 data-angsuran_ke="<?php echo $angsuran['angsuran_ke']; ?>"
                                                                 data-total="<?php echo $angsuran['jumlah_angsuran']; ?>"
-                                                                data-denda="<?php echo $angsuran['denda']; ?>"
+                                                                data-denda="<?php echo $d_nilai; ?>"
+                                                                data-denda_info="<?php echo htmlspecialchars($d_info); ?>"
                                                                 title="Bayar">
                                                             <i class="fas fa-money-bill"></i> Bayar
                                                         </button>
@@ -581,9 +609,10 @@ function formatRupiah($angka) {
                         </div>
                         
                         <div class="mb-3">
-                            <label for="bayar_denda" class="form-label">Denda (jika ada)</label>
-                            <input type="number" class="form-control" id="bayar_denda" name="denda" value="0" min="0">
-                            <div class="form-text">Denda akan ditambahkan ke total pembayaran dan masuk ke kas.</div>
+                            <label for="bayar_denda" class="form-label">Denda (otomatis, bisa diubah manual)</label>
+                            <input type="number" class="form-control" id="bayar_denda" name="denda" value="0" min="0" step="1">
+                            <div class="form-text" id="bayar_denda_info"></div>
+                            <div class="form-text">Ubah angkanya untuk denda manual; kosongkan untuk memakai hitungan otomatis. Denda ditambahkan ke total pembayaran dan masuk ke kas.</div>
                         </div>
                         
                         <div class="alert alert-info">
@@ -622,6 +651,7 @@ function formatRupiah($angka) {
             
             var denda = Number(button.getAttribute('data-denda'));
             document.getElementById('bayar_denda').value = denda;
+            document.getElementById('bayar_denda_info').textContent = button.getAttribute('data-denda_info') || '';
         });
 
         // Toggle debug info dengan Ctrl+D
