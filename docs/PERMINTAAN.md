@@ -27,7 +27,7 @@ ditandai **[di luar cakupan P1]**.
 | Edit anggota tidak wajib upload ulang | Selesai | 869a7b1 |
 | Email dihapus dari form Tambah Anggota (Teller) **[di luar cakupan P1]** | Selesai | 869a7b1 |
 | Tambah Anggota (Teller) membuat akun login anggota sendiri (bug lama) **[di luar cakupan P1]** | Selesai | 72a3198 |
-| Denda cicilan: nominal per hari menurut besar pinjaman (1 jt = 1.500, 2 jt = 2.500, 3 jt = 3.500), otomatis + bisa input manual **[di luar cakupan P1]** | Selesai (11 Okt 2026). Migrasi `2026_10c_denda.sql`; tarif bisa diatur Admin; pinjaman hanya kelipatan 1-3 jt (klien); denda dihitung sampai jatuh tempo berikutnya; uji: `php tests/denda_test.php` | lihat commit denda |
+| Denda cicilan: nominal per hari menurut besar pinjaman (1 jt = 1.500, 2 jt = 2.500, 3 jt = 3.500), otomatis + bisa input manual **[di luar cakupan P1]** | Selesai (11 Okt 2026). Migrasi `2026_10c_denda.sql`; tarif bisa diatur Admin; pinjaman hanya kelipatan 1-3 jt (klien); denda dihitung sampai jatuh tempo berikutnya; uji: `php tests/denda_test.php` | d7e374b |
 | Tabel angsuran resmi dari klien | **Diterima & diverifikasi** (11 Okt 2026): 9 kasus (Rp 1/2/3 jt × 1/2/3 bulan) dan lampiran 12 minggu cocok persis dengan rumus yang ada, tidak ada perubahan kode. Uji ulang: `php tests/tabel_angsuran_test.php`. Admin cukup mengisi tarif 1 bln = 15%, 2 bln = 25%, 3 bln = 35% dan maksimal pinjaman ≥ Rp 3 jt | tests/ |
 
 ## Permintaan 2 — screenshot level admin + contoh slip bukti angsuran
