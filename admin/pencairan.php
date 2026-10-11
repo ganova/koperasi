@@ -15,7 +15,7 @@ if (!isLoggedIn()) {
 }
 
 // Check if user has access to this page
-if (!isAdmin() && !isTeller()) {
+if (!isAdmin()) {
     $_SESSION['error'] = "Anda tidak memiliki akses ke halaman ini";
     header("Location: dashboard.php");
     exit();
@@ -50,43 +50,12 @@ if (isset($_GET['sync'])) {
     }
 }
 
-// Handle disbursement
+// Pencairan hanya dilakukan oleh Teller (teller/pencairan.php, wajib foto nasabah).
+// Aksi pencairan dari halaman Admin ditolak di server.
 if ($_POST && isset($_POST['cairkan'])) {
-    $id = $_POST['id'];
-    
-    try {
-        $db->beginTransaction();
-        
-        // Get approved loan application
-        $query_get = "SELECT * FROM pengajuan_pinjaman WHERE id = :id AND status = 'disetujui'";
-        $stmt_get = $db->prepare($query_get);
-        $stmt_get->bindParam(':id', $id);
-        $stmt_get->execute();
-        $pengajuan = $stmt_get->fetch(PDO::FETCH_ASSOC);
-        
-        if ($pengajuan) {
-            // Update status to dicairkan
-            $query_update = "UPDATE pengajuan_pinjaman SET status = 'dicairkan' WHERE id = :id";
-            $stmt_update = $db->prepare($query_update);
-            $stmt_update->bindParam(':id', $id);
-            $stmt_update->execute();
-            
-            // Buat record pinjaman + jadwal angsuran bila belum ada (dibuat saat persetujuan)
-            buatPinjamanDanJadwal($db, $pengajuan);
-            
-            $db->commit();
-            $_SESSION['success'] = "Pinjaman berhasil dicairkan dan jadwal angsuran telah dibuat";
-            
-            // Redirect untuk refresh data
-            header("Location: pencairan.php");
-            exit();
-        } else {
-            throw new Exception("Pengajuan tidak ditemukan atau belum disetujui");
-        }
-    } catch (Exception $e) {
-        $db->rollBack();
-        $_SESSION['error'] = "Gagal mencairkan pinjaman: " . $e->getMessage();
-    }
+    $_SESSION['error'] = "Pencairan hanya dapat diproses oleh Teller";
+    header("Location: pencairan.php");
+    exit();
 }
 
 // ============================================
@@ -315,14 +284,7 @@ function formatRupiah($angka) {
                                             <td><?php echo labelTenorRow($p); ?></td>
                                             <td><?php echo labelBungaRow($p); ?></td>
                                             <td>
-                                                <button class="btn btn-sm btn-success" data-bs-toggle="modal" 
-                                                        data-bs-target="#cairkanModal" 
-                                                        data-id="<?php echo $p['id']; ?>"
-                                                        data-nama="<?php echo $p['nama_lengkap']; ?>"
-                                                        data-kode="<?php echo $p['kode_pengajuan']; ?>"
-                                                        data-jumlah="<?php echo $p['jumlah_pinjaman']; ?>">
-                                                    <i class="fas fa-money-bill-wave me-1"></i>Cairkan
-                                                </button>
+                                                <span class="badge bg-warning text-dark">Menunggu pencairan oleh Teller</span>
                                             </td>
                                         </tr>
                                         <?php endforeach; ?>
@@ -379,6 +341,13 @@ function formatRupiah($angka) {
                                                 </span>
                                             </td>
                                             <td>
+                                                <?php if (!empty($p['foto_pencairan'])): ?>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                        onclick="lihatDokumen('<?php echo htmlspecialchars(urlFoto($p['foto_pencairan']), ENT_QUOTES); ?>', 'Foto nasabah - <?php echo htmlspecialchars($p['nama_lengkap'], ENT_QUOTES); ?>')"
+                                                        title="Foto nasabah saat pencairan">
+                                                    <i class="fas fa-camera"></i>
+                                                </button>
+                                                <?php endif; ?>
                                                 <a class="btn btn-sm btn-success" target="_blank" rel="noopener"
                                                    href="cetak_slip_pencairan.php?id=<?php echo (int) $p['id']; ?>" title="Cetak Slip">
                                                     <i class="fas fa-print"></i>
@@ -396,49 +365,7 @@ function formatRupiah($angka) {
         </div>
     </div>
 
-    <!-- Cairkan Modal -->
-    <div class="modal fade" id="cairkanModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form method="POST">
-                    <div class="modal-header bg-success text-white">
-                        <h5 class="modal-title">Konfirmasi Pencairan</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <input type="hidden" name="id" id="cairkan_id">
-                        <p>Yakin ingin mencairkan pinjaman ini?</p>
-                        <div class="alert alert-warning">
-                            <strong id="cairkan_nama"></strong><br>
-                            Kode: <span id="cairkan_kode"></span><br>
-                            Jumlah: <strong id="cairkan_jumlah"></strong>
-                        </div>
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Jadwal angsuran akan dibuat otomatis.
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="cairkan" class="btn btn-success">
-                            <i class="fas fa-check-circle me-1"></i> Cairkan
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        var cairkanModal = document.getElementById('cairkanModal');
-        cairkanModal.addEventListener('show.bs.modal', function (event) {
-            var button = event.relatedTarget;
-            document.getElementById('cairkan_id').value = button.getAttribute('data-id');
-            document.getElementById('cairkan_nama').textContent = button.getAttribute('data-nama');
-            document.getElementById('cairkan_kode').textContent = button.getAttribute('data-kode');
-            document.getElementById('cairkan_jumlah').textContent = 'Rp ' + Number(button.getAttribute('data-jumlah')).toLocaleString('id-ID');
-        });
-    </script>
+    <?php include __DIR__ . '/../includes/modal_dokumen.php'; ?>
 </body>
 </html>

@@ -5,6 +5,10 @@ assets/uploads/ktp/*
 !assets/uploads/ktp/.htaccess
 uploads/anggota/*
 !uploads/anggota/.htaccess
+uploads/pencairan/*
+!uploads/pencairan/.htaccess
+uploads/profil/*
+!uploads/profil/.htaccess
 uploads/logo/
 backups/
 *.log

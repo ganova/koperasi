@@ -39,32 +39,23 @@ if ($_POST) {
                             admin_id = :admin_id,
                             tanggal_persetujuan = NOW(),
                             catatan_admin = :catatan_admin 
-                            WHERE id = :id";
+                            WHERE id = :id AND status = 'menunggu'";
             $stmt_update = $db->prepare($query_update);
             $stmt_update->bindParam(':status', $status);
             $stmt_update->bindParam(':admin_id', $_SESSION['user_id']);
             $stmt_update->bindParam(':catatan_admin', $catatan_admin);
             $stmt_update->bindParam(':id', $id);
             $stmt_update->execute();
-            
-            // If approved, create pinjaman record
-            if ($status == 'disetujui') {
-                // Get pengajuan data
-                $query_get = "SELECT * FROM pengajuan_pinjaman WHERE id = :id";
-                $stmt_get = $db->prepare($query_get);
-                $stmt_get->bindParam(':id', $id);
-                $stmt_get->execute();
-                $pengajuan = $stmt_get->fetch(PDO::FETCH_ASSOC);
-                
-                if ($pengajuan) {
-                    // Buat pinjaman + jadwal angsuran (rumus & jadwal di includes/pinjaman_helper.php)
-                    buatPinjamanDanJadwal($db, $pengajuan);
-                }
+            if ($stmt_update->rowCount() < 1) {
+                throw new Exception("Pengajuan tidak ditemukan atau sudah diproses");
             }
+            // Persetujuan TIDAK membuat pinjaman/jadwal angsuran: itu dilakukan Teller saat pencairan.
             
             $db->commit();
             $action_text = $status == 'disetujui' ? 'disetujui' : 'ditolak';
-            $_SESSION['success'] = "Pengajuan berhasil $action_text";
+            $_SESSION['success'] = $status == 'disetujui'
+                ? "Pengajuan disetujui. Menunggu Teller memproses pencairan"
+                : "Pengajuan berhasil ditolak";
             header("Location: pengajuan.php");
             exit();
         } catch (Exception $e) {
@@ -92,7 +83,7 @@ $pengajuan_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $query_stats = "SELECT 
     COUNT(*) as total_pengajuan,
     COUNT(CASE WHEN status = 'menunggu' THEN 1 END) as menunggu,
-    COUNT(CASE WHEN status = 'disetujui' THEN 1 END) as disetujui,
+    COUNT(CASE WHEN status = 'disetujui' AND NOT EXISTS (SELECT 1 FROM pinjaman pj WHERE pj.pengajuan_id = pengajuan_pinjaman.id) THEN 1 END) as disetujui,
     COUNT(CASE WHEN status = 'dicairkan' THEN 1 END) as dicairkan,
     COUNT(CASE WHEN status = 'ditolak' THEN 1 END) as ditolak
     FROM pengajuan_pinjaman";

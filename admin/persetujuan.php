@@ -20,29 +20,20 @@ if ($_POST) {
             // Update pengajuan status
             $query_update = "UPDATE pengajuan_pinjaman SET status = 'disetujui', 
                             catatan_admin = :catatan_admin, admin_id = :admin_id,
-                            tanggal_persetujuan = NOW() WHERE id = :id";
+                            tanggal_persetujuan = NOW() WHERE id = :id AND status = 'menunggu'";
             $stmt_update = $db->prepare($query_update);
             $stmt_update->bindParam(':id', $id);
             $stmt_update->bindParam(':catatan_admin', $catatan_admin);
             $stmt_update->bindParam(':admin_id', $_SESSION['user_id']);
             
             if ($stmt_update->execute()) {
-                // Get pengajuan data
-                $query_get = "SELECT * FROM pengajuan_pinjaman WHERE id = :id";
-                $stmt_get = $db->prepare($query_get);
-                $stmt_get->bindParam(':id', $id);
-                $stmt_get->execute();
-                $pengajuan = $stmt_get->fetch(PDO::FETCH_ASSOC);
-                
-                if ($pengajuan) {
-                    // Buat pinjaman + jadwal angsuran (rumus & jadwal di includes/pinjaman_helper.php)
-                    buatPinjamanDanJadwal($db, $pengajuan);
-                    
-                    $db->commit();
-                    $_SESSION['success'] = "Pengajuan pinjaman berhasil disetujui dan pinjaman telah dibuat";
-                } else {
-                    throw new Exception("Data pengajuan tidak ditemukan");
+                // Persetujuan TIDAK membuat pinjaman/jadwal angsuran. Pinjaman dan jadwal dibuat
+                // saat Teller memproses pencairan (teller/pencairan.php), tanggal dihitung dari pencairan.
+                if ($stmt_update->rowCount() < 1) {
+                    throw new Exception("Data pengajuan tidak ditemukan atau sudah diproses");
                 }
+                $db->commit();
+                $_SESSION['success'] = "Pengajuan disetujui. Menunggu Teller memproses pencairan"; 
             } else {
                 throw new Exception("Gagal mengupdate status pengajuan");
             }
@@ -93,6 +84,7 @@ $filter_tanggal_selesai = $_GET['tanggal_selesai'] ?? '';
 
 // Build query with filters
 $query = "SELECT pp.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis, 
+          (SELECT COUNT(*) FROM pinjaman pj WHERE pj.pengajuan_id = pp.id) AS sudah_cair,
           jp.maksimal_pinjaman, u.nama_lengkap as admin_name
           FROM pengajuan_pinjaman pp
           JOIN anggota a ON pp.anggota_id = a.id
@@ -130,7 +122,7 @@ $pengajuan_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $query_stats = "SELECT 
     COUNT(*) as total_pengajuan,
     COUNT(CASE WHEN status = 'menunggu' THEN 1 END) as menunggu,
-    COUNT(CASE WHEN status = 'disetujui' THEN 1 END) as disetujui,
+    COUNT(CASE WHEN status = 'disetujui' AND NOT EXISTS (SELECT 1 FROM pinjaman pj WHERE pj.pengajuan_id = pengajuan_pinjaman.id) THEN 1 END) as disetujui,
     COUNT(CASE WHEN status = 'ditolak' THEN 1 END) as ditolak
     FROM pengajuan_pinjaman";
 $stmt_stats = $db->prepare($query_stats);
@@ -358,11 +350,16 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             $status_class = [
                                                 'menunggu' => 'warning',
                                                 'disetujui' => 'success',
+                                                'dicairkan' => 'info',
                                                 'ditolak' => 'danger'
                                             ];
+                                            $label_status = ucfirst($pengajuan['status']);
+                                            if ($pengajuan['status'] == 'disetujui') {
+                                                $label_status = $pengajuan['sudah_cair'] ? 'Dicairkan' : 'Disetujui (belum dicairkan)';
+                                            }
                                             ?>
-                                            <span class="badge bg-<?php echo $status_class[$pengajuan['status']]; ?> status-badge">
-                                                <?php echo ucfirst($pengajuan['status']); ?>
+                                            <span class="badge bg-<?php echo isset($status_class[$pengajuan['status']]) ? $status_class[$pengajuan['status']] : 'secondary'; ?> status-badge">
+                                                <?php echo $label_status; ?>
                                             </span>
                                             <?php if ($pengajuan['admin_name']): ?>
                                                 <br>

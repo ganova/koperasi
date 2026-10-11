@@ -121,18 +121,26 @@ if (!function_exists('hapusAnggota')) {
 if (!function_exists('migrasiRevisiBelumDijalankan')) {
     /**
      * true bila database belum menjalankan database/migrations/2026_10_revisi_koperasi.sql.
-     * Tanpa migrasi, fitur revisi (tarif flat, mingguan, dokumen anggota) tidak berjalan.
+     * Tanpa migrasi, fitur revisi (tarif flat, mingguan, dokumen, pencairan foto, profil) tidak berjalan.
      */
     function migrasiRevisiBelumDijalankan($db) {
         static $hasil = null;
         if ($hasil === null) {
-            $stmt = $db->query("SELECT COUNT(*) FROM information_schema.COLUMNS
-                                WHERE TABLE_SCHEMA = DATABASE() AND (
-                                      (TABLE_NAME = 'jenis_pinjaman' AND COLUMN_NAME = 'frekuensi_diizinkan')
-                                   OR (TABLE_NAME = 'pinjaman' AND COLUMN_NAME = 'skema_bunga')
-                                   OR (TABLE_NAME = 'anggota' AND COLUMN_NAME = 'foto_ktp_pasangan')
-                                   OR (TABLE_NAME = 'jenis_pinjaman_tarif' AND COLUMN_NAME = 'tenor_bulan'))");
-            $hasil = $stmt && (int) $stmt->fetchColumn() < 4;
+            // (tabel, kolom) yang dibuat migrasi tahap 1, 2026_10b, dan tahap 2
+            $wajib = [
+                ['jenis_pinjaman', 'frekuensi_diizinkan'], ['pinjaman', 'skema_bunga'],
+                ['anggota', 'foto_ktp_pasangan'], ['jenis_pinjaman_tarif', 'tenor_bulan'],
+                ['angsuran', 'cara_bayar'], ['pinjaman', 'foto_pencairan'],
+                ['pinjaman', 'tanggal_lunas'], ['users', 'foto_profil'],
+            ];
+            $ada = 0;
+            $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS
+                                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+            foreach ($wajib as $kolom) {
+                $stmt->execute($kolom);
+                $ada += (int) $stmt->fetchColumn();
+            }
+            $hasil = $ada < count($wajib);
         }
         return $hasil;
     }

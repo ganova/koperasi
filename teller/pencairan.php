@@ -34,15 +34,69 @@ if (!$koperasi) {
     ];
 }
 
-// PERBAIKAN: Hanya query untuk view, tidak ada aksi pencairan
-$query = "SELECT pp.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis, 
+// Upload melebihi post_max_size membuat $_POST kosong; tampilkan pesan yang jelas
+cekPostMelebihiBatas();
+
+// ============================================
+// PROSES PENCAIRAN (hanya Teller, foto nasabah wajib)
+// Persetujuan Admin hanya mengubah status; pinjaman + jadwal angsuran dibuat di sini,
+// jatuh tempo dihitung dari tanggal pencairan (hari ini).
+// ============================================
+if ($_POST && isset($_POST['proses_pencairan'])) {
+    $id = (int) $_POST['id'];
+    $foto_path = null;
+    $errmode = $db->getAttribute(PDO::ATTR_ERRMODE);
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    try {
+        $foto = validasiFotoUpload('foto_nasabah', 'Foto nasabah', 10 * 1024 * 1024, true);
+        $db->beginTransaction();
+
+        $stmt = $db->prepare("SELECT * FROM pengajuan_pinjaman WHERE id = ? AND status = 'disetujui' FOR UPDATE");
+        $stmt->execute([$id]);
+        $pengajuan = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$pengajuan) {
+            throw new Exception("Pengajuan tidak ditemukan atau belum disetujui Admin");
+        }
+        $stmt = $db->prepare("SELECT COUNT(*) FROM pinjaman WHERE pengajuan_id = ?");
+        $stmt->execute([$id]);
+        if ((int) $stmt->fetchColumn() > 0) {
+            throw new Exception("Pengajuan ini sudah dicairkan");
+        }
+
+        $foto_path = simpanFotoUpload($foto, 'pencairan');
+        $pinjaman_id = buatPinjamanDanJadwal($db, $pengajuan, date('Y-m-d'));
+        if (!$pinjaman_id) {
+            throw new Exception("Pinjaman gagal dibuat");
+        }
+        $db->prepare("UPDATE pinjaman SET foto_pencairan = ?, dicairkan_oleh = ? WHERE id = ?")
+           ->execute([$foto_path, $_SESSION['user_id'], $pinjaman_id]);
+        $db->prepare("UPDATE pengajuan_pinjaman SET status = 'dicairkan' WHERE id = ?")->execute([$id]);
+
+        $db->commit();
+        $_SESSION['success'] = "Pinjaman berhasil dicairkan. Jadwal angsuran sudah dibuat dari tanggal pencairan hari ini.";
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        hapusFotoUpload($foto_path);
+        $_SESSION['error'] = "Gagal memproses pencairan: " . htmlspecialchars($e->getMessage())
+            . (migrasiRevisiBelumDijalankan($db) ? " (database belum di-update, jalankan file migrasi)" : "");
+    }
+    $db->setAttribute(PDO::ATTR_ERRMODE, $errmode);
+    header("Location: pencairan.php");
+    exit();
+}
+
+$query = "SELECT pp.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis,
           jp.maksimal_pinjaman, u.nama_lengkap as admin_name,
-          p.id as pinjaman_id, p.kode_pinjaman, p.tanggal_pencairan, p.status as status_pinjaman
+          p.id as pinjaman_id, p.kode_pinjaman, p.tanggal_pencairan, p.status as status_pinjaman,
+          p.foto_pencairan, uc.nama_lengkap as teller_name
           FROM pengajuan_pinjaman pp
           JOIN anggota a ON pp.anggota_id = a.id
           JOIN jenis_pinjaman jp ON pp.jenis_pinjaman_id = jp.id
           LEFT JOIN users u ON pp.admin_id = u.id
           LEFT JOIN pinjaman p ON pp.id = p.pengajuan_id
+          LEFT JOIN users uc ON p.dicairkan_oleh = uc.id
           WHERE pp.status IN ('disetujui', 'dicairkan', 'develop')
           OR (pp.status = '' AND pp.tanggal_persetujuan IS NOT NULL)
           ORDER BY pp.tanggal_persetujuan DESC";
@@ -62,6 +116,10 @@ $query_stats = "SELECT
 $stmt_stats = $db->prepare($query_stats);
 $stmt_stats->execute();
 $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
+// Kartu: "Disetujui" = disetujui tapi BELUM dicairkan; "Dicairkan" = sudah punya pinjaman
+$stats['disetujui'] = (int) $db->query("SELECT COUNT(*) FROM pengajuan_pinjaman pp WHERE pp.status = 'disetujui'
+                                        AND NOT EXISTS (SELECT 1 FROM pinjaman p WHERE p.pengajuan_id = pp.id)")->fetchColumn();
+$stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -126,8 +184,8 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                         <i class="fas fa-info-circle text-primary me-3 fa-lg"></i>
                         <div>
                             <h6 class="alert-heading mb-1">Informasi Akses</h6>
-                            <p class="mb-0">Halaman ini hanya menampilkan status pencairan pinjaman. 
-                            <strong>Hanya Administrator yang berhak melakukan pencairan pinjaman.</strong></p>
+                            <p class="mb-0">Pengajuan yang sudah disetujui Admin menunggu diproses di sini.
+                            <strong>Teller menekan "Proses Pencairan" dan wajib mengunggah foto nasabah</strong>; jadwal angsuran dibuat dari tanggal pencairan.</p>
                         </div>
                     </div>
                 </div>
@@ -265,10 +323,12 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             if ($status == 'develop' || ($status == '' && $pengajuan['tanggal_persetujuan'])) {
                                                 $status = 'disetujui';
                                             }
-                                            if ($pengajuan['status_pinjaman'] == 'aktif') {
-                                                $status = 'dicairkan';
+                                            if (!empty($pengajuan['pinjaman_id'])) {
+                                                $status = $pengajuan['status_pinjaman'] == 'lunas' ? 'lunas' : 'dicairkan';
                                             }
+                                            $belum_cair = ($status == 'disetujui' && empty($pengajuan['pinjaman_id']));
                                             $status_class = [
+                                                'lunas' => 'secondary',
                                                 'menunggu' => 'warning',
                                                 'disetujui' => 'success',
                                                 'dicairkan' => 'info',
@@ -277,7 +337,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                             ];
                                             ?>
                                             <span class="badge bg-<?php echo $status_class[$status] ?? 'secondary'; ?> status-badge">
-                                                <?php echo ucfirst($status); ?>
+                                                <?php echo $belum_cair ? 'Disetujui (belum dicairkan)' : ucfirst($status); ?>
                                             </span>
                                         </td>
                                         <td>
@@ -314,6 +374,24 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                 <i class="fas fa-eye"></i>
                                             </button>
                                             
+                                            <?php if ($belum_cair): ?>
+                                            <button class="btn btn-sm btn-primary btn-action" data-bs-toggle="modal"
+                                                    data-bs-target="#pencairanModal"
+                                                    data-id="<?php echo (int) $pengajuan['id']; ?>"
+                                                    data-nama="<?php echo htmlspecialchars($pengajuan['nama_lengkap']); ?>"
+                                                    data-kode="<?php echo htmlspecialchars($pengajuan['kode_pengajuan']); ?>"
+                                                    data-jumlah="<?php echo $pengajuan['jumlah_pinjaman']; ?>"
+                                                    data-ringkas="<?php echo htmlspecialchars(labelTenorRow($pengajuan) . ' | ' . ringkasanAngsuran(hitungDariPinjaman($pengajuan))); ?>">
+                                                <i class="fas fa-hand-holding-usd me-1"></i>Proses Pencairan
+                                            </button>
+                                            <?php endif; ?>
+                                            <?php if (!empty($pengajuan['foto_pencairan'])): ?>
+                                            <button class="btn btn-sm btn-outline-secondary btn-action" type="button"
+                                                    onclick="lihatDokumen('<?php echo htmlspecialchars(urlFoto($pengajuan['foto_pencairan']), ENT_QUOTES); ?>', 'Foto nasabah - <?php echo htmlspecialchars($pengajuan['nama_lengkap'], ENT_QUOTES); ?>')"
+                                                    title="Foto nasabah saat pencairan">
+                                                <i class="fas fa-camera"></i>
+                                            </button>
+                                            <?php endif; ?>
                                             <!-- Slip pencairan (A5) - hanya untuk pengajuan yang sudah menjadi pinjaman -->
                                             <?php if (!empty($pengajuan['pinjaman_id'])): ?>
                                             <a class="btn btn-sm btn-success btn-action" target="_blank" rel="noopener"
@@ -486,7 +564,70 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <!-- Proses Pencairan Modal -->
+    <div class="modal fade" id="pencairanModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title"><i class="fas fa-hand-holding-usd me-2"></i>Proses Pencairan</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="id" id="pencairan_id">
+                        <div class="alert alert-warning">
+                            <strong id="pencairan_nama"></strong><br>
+                            Kode: <span id="pencairan_kode"></span><br>
+                            Jumlah: <strong id="pencairan_jumlah"></strong><br>
+                            <small id="pencairan_ringkas"></small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Foto Nasabah (saat serah terima dana) <span class="text-danger">*</span></label>
+                            <input type="file" name="foto_nasabah" id="foto_nasabah" class="form-control" required
+                                   accept="image/*" capture="environment">
+                            <small class="text-muted">JPG/PNG/WEBP, maksimal 10 MB. Di HP bisa langsung memotret.</small>
+                            <img id="foto_nasabah_preview" class="img-thumbnail mt-2 d-none" style="max-height:160px" alt="Pratinjau foto">
+                        </div>
+                        <div class="alert alert-info mb-0">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Jadwal angsuran dibuat otomatis dengan jatuh tempo dihitung dari <strong>hari ini</strong> (tanggal pencairan).
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" name="proses_pencairan" class="btn btn-primary">
+                            <i class="fas fa-check-circle me-1"></i> Cairkan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <?php include __DIR__ . '/../includes/modal_dokumen.php'; ?>
+    <script>
+        var pencairanModal = document.getElementById('pencairanModal');
+        pencairanModal.addEventListener('show.bs.modal', function (event) {
+            var b = event.relatedTarget;
+            document.getElementById('pencairan_id').value = b.getAttribute('data-id');
+            document.getElementById('pencairan_nama').textContent = b.getAttribute('data-nama');
+            document.getElementById('pencairan_kode').textContent = b.getAttribute('data-kode');
+            document.getElementById('pencairan_jumlah').textContent = 'Rp ' + Number(b.getAttribute('data-jumlah')).toLocaleString('id-ID');
+            document.getElementById('pencairan_ringkas').textContent = b.getAttribute('data-ringkas');
+            document.getElementById('foto_nasabah').value = '';
+            document.getElementById('foto_nasabah_preview').classList.add('d-none');
+        });
+        document.getElementById('foto_nasabah').addEventListener('change', function () {
+            var img = document.getElementById('foto_nasabah_preview');
+            if (this.files.length) {
+                img.src = URL.createObjectURL(this.files[0]);
+                img.classList.remove('d-none');
+            } else {
+                img.classList.add('d-none');
+            }
+        });
+    </script>
     <script>
         // Detail Modal
         var detailModal = document.getElementById('detailModal');
