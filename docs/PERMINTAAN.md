@@ -42,10 +42,27 @@ ditandai **[di luar cakupan P1]**.
 Perlu konfirmasi klien untuk 2.4: arti "Terbilang 0" (sekarang = nominal dalam kata + sisa tagihan terpisah),
 dan judul slip ("Bukti Pembayaran Angsuran" sesuai gambar vs "Bukti Angsuran Lunas" sesuai catatan).
 
+## Permintaan 3 — `prompt-revisi-koperasi-tahap2.md` (revisi tahap 2)
+
+Migrasi: `database/migrations/2026_10_revisi_tahap2.sql` (jalankan setelah migrasi sebelumnya).
+
+| # | Isi | Status | Commit |
+|---|---|---|---|
+| A | Cetak Bukti Pelunasan (Admin & Teller; hanya bila semua cicilan lunas; tanggal lunas dicatat) | Selesai | 07d11b2 |
+| B | Pisahkan persetujuan dan pencairan (jadwal angsuran dibuat saat Teller mencairkan) | Selesai | e42c403 |
+| C | Foto nasabah wajib saat pencairan, bisa dilihat Admin & Teller | Selesai | e42c403 |
+| D | Profil anggota read-only (foto pencairan, tanpa form & upload KTP) | Selesai | 4a5b41b |
+| E | Sidebar anggota: foto nasabah + badge status Aktif/Nonaktif | Selesai | 4a5b41b |
+| F | Teller: Edit Profil berfungsi (+telepon, foto 2 MB), Ubah Password (min. 8, backdoor dibuang), foto di sidebar | Selesai | lihat commit F |
+
+Perubahan di luar poin: pinjaman otomatis ditandai lunas bila semua cicilan lunas (sebelumnya pinjaman skema lama
+tertahan `aktif` karena sisa pembulatan 0,01); `teller/ubah_password.php` kini cek role; backdoor password
+`'password'` dibuang.
+
 ## Hal bawaan (bukan permintaan klien)
 
 Banner "Database belum di-update", README, repo GitHub, `sql_mode` per koneksi di `config/config.php`,
 pesan error tidak lagi hilang otomatis, perbaikan INSERT `admin/pengajuan.php`.
 Bug lama yang **belum** diubah: tabel `pelunasan_dini` tidak ada (catatan pelunasan dini tidak tersimpan),
-pinjaman skema lama menyisakan `sisa_pokok` 0,01, tombol Bayar tidak mencegah bayar ganda,
+tombol Bayar tidak mencegah bayar ganda,
 `admin/jenis_pinjaman.php` tanpa cek role.

@@ -16,74 +16,77 @@ $stmt->bindParam(':user_id', $user_id);
 $stmt->execute();
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Handle update profil
+// Upload foto melebihi post_max_size membuat $_POST kosong; tampilkan pesan yang jelas
+cekPostMelebihiBatas();
+
+// Handle update profil & password (teller hanya bisa mengubah akunnya sendiri: $_SESSION['user_id'])
 if ($_POST) {
     if (isset($_POST['update_profil'])) {
-        $nama_lengkap = $_POST['nama_lengkap'];
-        $email = $_POST['email'] ?? '';
-
+        $errmode = $db->getAttribute(PDO::ATTR_ERRMODE);
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $foto_baru = null;
         try {
-            $query = "UPDATE users SET nama_lengkap = :nama_lengkap, email = :email 
-                     WHERE id = :user_id";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':nama_lengkap', $nama_lengkap);
-            $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':user_id', $user_id);
-            
-            if ($stmt->execute()) {
-                // Update session data
-                $_SESSION['nama_lengkap'] = $nama_lengkap;
-                $_SESSION['email'] = $email;
-                
-                $_SESSION['success'] = "Profil berhasil diperbarui";
-                header("Location: profil.php");
-                exit();
-            } else {
-                throw new Exception("Gagal memperbarui profil");
+            // Username & role TIDAK bisa diubah (tidak dibaca dari form)
+            $nama_lengkap = trim(isset($_POST['nama_lengkap']) ? $_POST['nama_lengkap'] : '');
+            $email = trim(isset($_POST['email']) ? $_POST['email'] : '');
+            $telepon = trim(isset($_POST['telepon']) ? $_POST['telepon'] : '');
+
+            if ($nama_lengkap === '' || strlen($nama_lengkap) > 100) {
+                throw new Exception("Nama lengkap wajib diisi (maksimal 100 karakter)");
             }
+            if ($email !== '' && (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100)) {
+                throw new Exception("Format email tidak valid");
+            }
+            if ($telepon !== '' && !preg_match('/^[0-9+\-\s()]{5,20}$/', $telepon)) {
+                throw new Exception("Nomor telepon tidak valid (5-20 digit)");
+            }
+            $foto = validasiFotoUpload('foto_profil', 'Foto profil', 2 * 1024 * 1024, false);
+
+            if (migrasiRevisiBelumDijalankan($db)) {
+                throw new Exception("Database belum di-update, jalankan file migrasi (lihat README)");
+            }
+
+            $set = ['nama_lengkap = ?', 'email = ?', 'telepon = ?'];
+            $nilai = [$nama_lengkap, $email !== '' ? $email : null, $telepon !== '' ? $telepon : null];
+            if ($foto) {
+                $foto_baru = simpanFotoUpload($foto, 'profil');
+                $set[] = 'foto_profil = ?';
+                $nilai[] = $foto_baru;
+            }
+            $nilai[] = $user_id;
+            $db->prepare("UPDATE users SET " . implode(', ', $set) . " WHERE id = ?")->execute($nilai);
+
+            if ($foto_baru && !empty($user['foto_profil'])) {
+                hapusFotoUpload($user['foto_profil']);
+            }
+            $_SESSION['nama_lengkap'] = $nama_lengkap;
+            $_SESSION['email'] = $email;
+            $_SESSION['success'] = "Profil berhasil diperbarui";
         } catch (Exception $e) {
+            hapusFotoUpload($foto_baru);
             $_SESSION['error'] = "Gagal memperbarui profil: " . $e->getMessage();
         }
+        $db->setAttribute(PDO::ATTR_ERRMODE, $errmode);
+        header("Location: profil.php");
+        exit();
     }
 
-    // Handle update password
+    // Handle update password (aturan sama dengan halaman Ubah Password)
     if (isset($_POST['update_password'])) {
-        $password_lama = $_POST['password_lama'];
-        $password_baru = $_POST['password_baru'];
-        $konfirmasi_password = $_POST['konfirmasi_password'];
-
         try {
-            // Verify current password
-            if (!password_verify($password_lama, $user['password'])) {
-                throw new Exception("Password lama tidak sesuai");
-            }
-
-            // Validate new password
-            if (strlen($password_baru) < 6) {
-                throw new Exception("Password baru minimal 6 karakter");
-            }
-
-            if ($password_baru !== $konfirmasi_password) {
-                throw new Exception("Konfirmasi password tidak sesuai");
-            }
-
-            // Update password
-            $hashed_password = password_hash($password_baru, PASSWORD_DEFAULT);
-            $query = "UPDATE users SET password = :password WHERE id = :user_id";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':password', $hashed_password);
-            $stmt->bindParam(':user_id', $user_id);
-            
-            if ($stmt->execute()) {
-                $_SESSION['success'] = "Password berhasil diperbarui";
-                header("Location: profil.php");
-                exit();
-            } else {
-                throw new Exception("Gagal memperbarui password");
-            }
+            ubahPasswordPengguna(
+                $db,
+                $user_id,
+                isset($_POST['password_lama']) ? $_POST['password_lama'] : '',
+                isset($_POST['password_baru']) ? $_POST['password_baru'] : '',
+                isset($_POST['konfirmasi_password']) ? $_POST['konfirmasi_password'] : ''
+            );
+            $_SESSION['success'] = "Password berhasil diperbarui";
         } catch (Exception $e) {
             $_SESSION['error'] = "Gagal memperbarui password: " . $e->getMessage();
         }
+        header("Location: profil.php");
+        exit();
     }
 }
 
@@ -205,7 +208,12 @@ $activities = $stmt_activities->fetchAll(PDO::FETCH_ASSOC);
                         <div class="card profile-card mb-4">
                             <div class="profile-header">
                                 <div class="profile-avatar">
-                                    <i class="fas fa-user-tie"></i>
+                                    <?php if (!empty($user['foto_profil'])): ?>
+                                        <img src="<?php echo htmlspecialchars(urlFoto($user['foto_profil'])); ?>" alt="Foto profil"
+                                             style="width:100%;height:100%;object-fit:cover;border-radius:50%">
+                                    <?php else: ?>
+                                        <span class="fw-bold" style="font-size:2rem"><?php echo htmlspecialchars(getInitials($user['nama_lengkap'])); ?></span>
+                                    <?php endif; ?>
                                 </div>
                                 <h4><?php echo htmlspecialchars($user['nama_lengkap']); ?></h4>
                                 <p class="mb-0">Teller</p>
@@ -335,7 +343,7 @@ $activities = $stmt_activities->fetchAll(PDO::FETCH_ASSOC);
                                         <h5 class="card-title">Informasi Profil</h5>
                                         <p class="text-muted">Perbarui informasi profil dan alamat email Anda.</p>
                                         
-                                        <form method="POST">
+                                        <form method="POST" enctype="multipart/form-data">
                                             <div class="row">
                                                 <div class="col-md-6">
                                                     <div class="mb-3">
@@ -359,6 +367,25 @@ $activities = $stmt_activities->fetchAll(PDO::FETCH_ASSOC);
                                                 <input type="email" name="email" class="form-control" 
                                                        value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" 
                                                        placeholder="Contoh: email@example.com">
+                                            </div>
+
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Nomor Telepon</label>
+                                                        <input type="text" name="telepon" class="form-control"
+                                                               value="<?php echo htmlspecialchars(isset($user['telepon']) ? $user['telepon'] : ''); ?>"
+                                                               placeholder="Contoh: 081234567890">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Foto Profil</label>
+                                                        <input type="file" name="foto_profil" id="fotoProfil" class="form-control"
+                                                               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                                                        <div class="form-text">JPG/PNG/WEBP, maksimal 2 MB. Kosongkan bila tidak diganti.</div>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <div class="alert alert-info">
@@ -389,7 +416,7 @@ $activities = $stmt_activities->fetchAll(PDO::FETCH_ASSOC);
                                             <div class="mb-3">
                                                 <label class="form-label">Password Baru *</label>
                                                 <input type="password" name="password_baru" class="form-control" required 
-                                                       placeholder="Minimal 6 karakter" id="newPassword">
+                                                       placeholder="Minimal 8 karakter" id="newPassword" minlength="8">
                                                 <div class="password-strength" id="passwordStrength"></div>
                                                 <div class="form-text" id="passwordFeedback"></div>
                                             </div>
@@ -540,9 +567,9 @@ $activities = $stmt_activities->fetchAll(PDO::FETCH_ASSOC);
             const newPassword = document.getElementById('newPassword').value;
             const confirmPassword = document.querySelector('input[name="konfirmasi_password"]').value;
             
-            if (newPassword.length < 6) {
+            if (newPassword.length < 8) {
                 e.preventDefault();
-                alert('Password baru minimal 6 karakter');
+                alert('Password baru minimal 8 karakter');
                 return false;
             }
             
@@ -550,6 +577,19 @@ $activities = $stmt_activities->fetchAll(PDO::FETCH_ASSOC);
                 e.preventDefault();
                 alert('Konfirmasi password tidak sesuai');
                 return false;
+            }
+        });
+
+        // Validasi foto profil di klien (server memvalidasi ulang dengan finfo)
+        document.getElementById('fotoProfil').addEventListener('change', function () {
+            if (!this.files.length) return;
+            var f = this.files[0];
+            if (['image/jpeg', 'image/png', 'image/webp'].indexOf(f.type) === -1) {
+                alert('Foto profil harus berupa JPG, PNG, atau WEBP.');
+                this.value = '';
+            } else if (f.size > 2 * 1024 * 1024) {
+                alert('Foto profil melebihi 2 MB.');
+                this.value = '';
             }
         });
 

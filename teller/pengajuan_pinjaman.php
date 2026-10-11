@@ -308,7 +308,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                         'ditolak' => 'danger'
                                                     ];
                                                     ?>
-                                                    <span class="badge-status bg-<?php echo $status_class[$pengajuan['status']]; ?> text-white">
+                                                    <span class="badge-status bg-<?php echo (isset($status_class[$pengajuan['status']]) ? $status_class[$pengajuan['status']] : 'info'); ?> text-white">
                                                         <?php echo ucfirst($pengajuan['status']); ?>
                                                     </span>
                                                 </td>
@@ -351,7 +351,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                                         <tr>
                                                                             <td><strong>Status</strong></td>
                                                                             <td>
-                                                                                <span class="badge-status bg-<?php echo $status_class[$pengajuan['status']]; ?> text-white">
+                                                                                <span class="badge-status bg-<?php echo (isset($status_class[$pengajuan['status']]) ? $status_class[$pengajuan['status']] : 'info'); ?> text-white">
                                                                                     <?php echo ucfirst($pengajuan['status']); ?>
                                                                                 </span>
                                                                             </td>

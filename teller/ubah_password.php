@@ -8,55 +8,26 @@ $page_title = "Ubah Password";
 $error = '';
 $success = '';
 
+// Hanya teller; mengubah password milik sendiri saja ($_SESSION['user_id'])
+if (!isTeller()) {
+    header('Location: ../dashboard.php');
+    exit();
+}
+
 // Process form submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $current_password = $_POST['current_password'] ?? '';
-    $new_password = $_POST['new_password'] ?? '';
-    $confirm_password = $_POST['confirm_password'] ?? '';
-    
-    // Validate inputs
-    if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
-        $error = "Semua field harus diisi!";
-    } elseif ($new_password !== $confirm_password) {
-        $error = "Password baru dan konfirmasi password tidak cocok!";
-    } elseif (strlen($new_password) < 6) {
-        $error = "Password baru harus minimal 6 karakter!";
-    } else {
-        try {
-            // Get current user data
-            $query = "SELECT password FROM users WHERE id = :user_id";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':user_id', $_SESSION['user_id']);
-            $stmt->execute();
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($user) {
-                // Verify current password (using simple comparison for demo)
-                // In production, use password_verify()
-                if ($current_password === 'password' || password_verify($current_password, $user['password'])) {
-                    // Update password
-                    $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-                    $update_query = "UPDATE users SET password = :password WHERE id = :user_id";
-                    $update_stmt = $db->prepare($update_query);
-                    $update_stmt->bindParam(':password', $hashed_password);
-                    $update_stmt->bindParam(':user_id', $_SESSION['user_id']);
-                    
-                    if ($update_stmt->execute()) {
-                        $success = "Password berhasil diubah!";
-                        // Clear form
-                        $_POST = array();
-                    } else {
-                        $error = "Gagal mengubah password. Silakan coba lagi.";
-                    }
-                } else {
-                    $error = "Password saat ini salah!";
-                }
-            } else {
-                $error = "User tidak ditemukan!";
-            }
-        } catch (PDOException $e) {
-            $error = "Terjadi kesalahan sistem: " . $e->getMessage();
-        }
+    try {
+        ubahPasswordPengguna(
+            $db,
+            $_SESSION['user_id'],
+            isset($_POST['current_password']) ? $_POST['current_password'] : '',
+            isset($_POST['new_password']) ? $_POST['new_password'] : '',
+            isset($_POST['confirm_password']) ? $_POST['confirm_password'] : ''
+        );
+        $success = "Password berhasil diubah! Gunakan password baru saat login berikutnya.";
+        $_POST = array();
+    } catch (Exception $e) {
+        $error = $e->getMessage();
     }
 }
 ?>
@@ -235,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                     <div class="password-criteria">
                                                         <div class="d-flex align-items-center mb-2" id="criteriaLength">
                                                             <i class="fas fa-circle me-2 criteria-not-met"></i>
-                                                            <span>Minimal 6 karakter</span>
+                                                            <span>Minimal 8 karakter</span>
                                                         </div>
                                                         <div class="d-flex align-items-center mb-2" id="criteriaUppercase">
                                                             <i class="fas fa-circle me-2 criteria-not-met"></i>
@@ -371,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             let messages = [];
             
             // Check length
-            if (password.length >= 6) {
+            if (password.length >= 8) {
                 strength += 1;
                 criteria.length.querySelector('i').className = 'fas fa-check-circle me-2 criteria-met';
             } else {
@@ -451,9 +422,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 return false;
             }
             
-            if (password.length < 6) {
+            if (password.length < 8) {
                 e.preventDefault();
-                alert('Password baru harus minimal 6 karakter!');
+                alert('Password baru harus minimal 8 karakter!');
                 return false;
             }
         });

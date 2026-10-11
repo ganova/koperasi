@@ -28,6 +28,10 @@ Aplikasi koperasi simpan pinjam (PHP + MySQL) dengan 3 level login: Admin, Telle
    ```bash
    mysql -u root koperasi_db < database/migrations/2026_10b_cara_bayar_angsuran.sql
    ```
+   Terakhir, migrasi **revisi tahap 2** (pencairan oleh Teller + foto nasabah, tanggal lunas, profil teller), juga **sekali saja**:
+   ```bash
+   mysql -u root koperasi_db < database/migrations/2026_10_revisi_tahap2.sql
+   ```
 4. Sesuaikan koneksi database di `config/database.php` bila user/password MySQL berbeda.
 5. Atur `php.ini` lalu restart Apache:
    ```ini
@@ -49,6 +53,13 @@ tidak tersimpan. Jalankan migrasinya sekali (bisa juga lewat phpMyAdmin → data
 
 - Jenis pinjaman lama (Umum, Pendidikan, Usaha, Mendesak) perlu diisi **tarif bunga flat per tenor** di menu Admin → Jenis Pinjaman sebelum bisa dipakai di form pengajuan.
 - Anggota baru yang ditambahkan Teller mendapat akun login dengan password awal `123456`.
+
+## Alur pinjaman (sejak tahap 2)
+
+`Menunggu` (Teller/Admin buat pengajuan) → `Disetujui, belum dicairkan` (Admin) → **Teller** menekan
+*Proses Pencairan* di halaman Status Pencairan dan wajib mengunggah foto nasabah → `Aktif`
+(jadwal angsuran dibuat dari tanggal pencairan) → `Lunas` (bisa cetak Bukti Pelunasan).
+Foto nasabah juga menjadi foto profil anggota dan foto di sidebar anggota.
 
 ## Catatan revisi Oktober 2026
 
