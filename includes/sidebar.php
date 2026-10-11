@@ -55,6 +55,26 @@ try {
 
 $current_role = $_SESSION['role'];
 $current_page = basename($_SERVER['PHP_SELF']);
+
+// Foto sidebar per level (fallback avatar inisial):
+//  - anggota: foto nasabah dari pencairan terbaru + status anggota (poin E)
+//  - teller : foto profil teller (poin F)
+$sidebar_foto = '';
+$sidebar_status_anggota = '';
+if ($current_role === 'anggota') {
+    $stmt_sb = $db->prepare("SELECT id, status FROM anggota WHERE user_id = ?");
+    $stmt_sb->execute([$_SESSION['user_id']]);
+    $row_sb = $stmt_sb->fetch(PDO::FETCH_ASSOC);
+    if ($row_sb) {
+        $sidebar_status_anggota = $row_sb['status'];
+        $sidebar_foto = fotoNasabahAnggota($db, $row_sb['id']);
+    }
+} elseif ($current_role === 'teller' && kolomAda($db, 'users', 'foto_profil')) {
+    $stmt_sb = $db->prepare("SELECT foto_profil FROM users WHERE id = ?");
+    $stmt_sb->execute([$_SESSION['user_id']]);
+    $sidebar_foto = (string) $stmt_sb->fetchColumn();
+}
+$sidebar_pakai_avatar = in_array($current_role, ['anggota', 'teller'], true);
 ?>
 <!-- Sidebar -->
 <div class="sidebar bg-dark" id="sidebarMenu">
@@ -62,7 +82,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <!-- Brand Logo -->
         <div class="text-center mb-4">
             <div class="logo-container mx-auto mb-2">
-                <?php if (!empty($logo_path)): ?>
+                <?php if ($sidebar_pakai_avatar && $sidebar_foto): ?>
+                    <img src="<?php echo htmlspecialchars(urlFoto($sidebar_foto)); ?>" alt="Foto profil">
+                <?php elseif ($sidebar_pakai_avatar): ?>
+                    <span class="text-white fw-bold" style="font-size:1.5rem"><?php echo htmlspecialchars(getInitials($_SESSION['nama_lengkap'])); ?></span>
+                <?php elseif (!empty($logo_path)): ?>
                     <img src="<?php echo $logo_path; ?>" 
                          alt="Logo <?php echo htmlspecialchars($koperasi['nama']); ?>"
                          onerror="this.style.display='none'; this.parentNode.innerHTML='<i class=\'fas fa-hand-holding-usd text-white fa-2x\'></i>';">
@@ -71,7 +95,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <?php endif; ?>
             </div>
             <h6 class="text-white mb-0"><?php echo htmlspecialchars($koperasi['nama']); ?></h6>
-            <small class="text-white-50">Management System</small>
+            <?php if ($current_role === 'anggota' && $sidebar_status_anggota !== ''): ?>
+                <span class="badge bg-<?php echo $sidebar_status_anggota === 'aktif' ? 'success' : 'secondary'; ?>">
+                    <?php echo ucfirst($sidebar_status_anggota); ?>
+                </span>
+            <?php else: ?>
+                <small class="text-white-50">Management System</small>
+            <?php endif; ?>
         </div>
 
         <hr class="bg-light">
