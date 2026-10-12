@@ -204,6 +204,25 @@ if (!function_exists('hitungDariPinjaman')) {
     }
 }
 
+if (!defined('JADWAL_DARI_PENGAJUAN')) {
+    // true  : jatuh tempo cicilan dihitung dari tanggal PENGAJUAN/pendaftaran (permintaan klien, 12 Okt 2026)
+    // false : dihitung dari tanggal pencairan (brief tahap 2). Cukup ubah nilai ini.
+    define('JADWAL_DARI_PENGAJUAN', true);
+}
+
+if (!function_exists('tanggalMulaiJadwal')) {
+    /** Tanggal acuan jatuh tempo cicilan pertama (Y-m-d) untuk sebuah pengajuan. */
+    function tanggalMulaiJadwal($pengajuan) {
+        if (JADWAL_DARI_PENGAJUAN && !empty($pengajuan['tanggal_pengajuan'])) {
+            $t = strtotime($pengajuan['tanggal_pengajuan']);
+            if ($t) {
+                return date('Y-m-d', $t);
+            }
+        }
+        return date('Y-m-d');
+    }
+}
+
 if (!function_exists('buatPinjamanDanJadwal')) {
     /**
      * Membuat record pinjaman + jadwal angsuran dari pengajuan (dipanggil di dalam
@@ -212,7 +231,7 @@ if (!function_exists('buatPinjamanDanJadwal')) {
      *
      * @return int|null id pinjaman yang dibuat, null bila sudah ada
      */
-    function buatPinjamanDanJadwal($db, $pengajuan, $tanggal_mulai = null) {
+    function buatPinjamanDanJadwal($db, $pengajuan, $tanggal_mulai = null, $tanggal_pencairan = null) {
         $cek = $db->prepare("SELECT id FROM pinjaman WHERE pengajuan_id = ?");
         $cek->execute([$pengajuan['id']]);
         if ($cek->fetch()) {
@@ -221,6 +240,10 @@ if (!function_exists('buatPinjamanDanJadwal')) {
 
         if ($tanggal_mulai === null) {
             $tanggal_mulai = date('Y-m-d');
+        }
+        // Tanggal pencairan (uang diserahkan) bisa berbeda dari tanggal acuan jatuh tempo
+        if ($tanggal_pencairan === null) {
+            $tanggal_pencairan = $tanggal_mulai;
         }
         $hitung = hitungDariPinjaman($pengajuan);
         $n = $hitung['jumlah_cicilan'];
@@ -236,7 +259,7 @@ if (!function_exists('buatPinjamanDanJadwal')) {
             $pengajuan['id'], $kode_pinjaman, $pengajuan['anggota_id'], $pengajuan['jenis_pinjaman_id'],
             $hitung['pokok'], $hitung['pokok'], $hitung['tenor'], $hitung['bunga_persen'],
             $hitung['skema'], $hitung['frekuensi'], $n, $hitung['total'], $hitung['angsuran'],
-            $tanggal_mulai, $jatuh_tempo_akhir,
+            $tanggal_pencairan, $jatuh_tempo_akhir,
         ]);
         $pinjaman_id = $db->lastInsertId();
 

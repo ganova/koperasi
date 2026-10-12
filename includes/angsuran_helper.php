@@ -1,6 +1,6 @@
 <?php
 /**
- * Koreksi pembayaran angsuran (hanya Admin).
+ * Koreksi pembayaran angsuran (Admin; Teller hanya untuk pembayaran yang dicatat HARI INI).
  *
  * Dipakai bila Teller salah menekan "Bayar": pembayaran dibatalkan, cicilan kembali "belum bayar",
  * dan pembukuan dibalikkan dengan pola yang sama seperti admin/koreksi.php:
@@ -17,8 +17,8 @@ if (!function_exists('batalkanPembayaranAngsuran')) {
      * @throws Exception
      */
     function batalkanPembayaranAngsuran($db, $angsuran_id, $alasan, $user_id) {
-        if (!isAdmin()) {
-            throw new Exception("Hanya Admin yang dapat membatalkan pembayaran");
+        if (!isAdmin() && !isTeller()) {
+            throw new Exception("Anda tidak berhak membatalkan pembayaran");
         }
         $alasan = trim($alasan);
         if (strlen($alasan) < 5) {
@@ -40,6 +40,10 @@ if (!function_exists('batalkanPembayaranAngsuran')) {
             $a = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$a || $a['status'] !== 'lunas') {
                 throw new Exception("Angsuran tidak ditemukan atau belum dibayar");
+            }
+            // Teller: hanya salah-pencet pada hari yang sama; koreksi yang lebih lama oleh Admin
+            if (!isAdmin() && date('Y-m-d', strtotime($a['tanggal_bayar'])) !== date('Y-m-d')) {
+                throw new Exception("Teller hanya dapat membatalkan pembayaran yang dicatat hari ini. Hubungi Admin untuk koreksi yang lebih lama");
             }
 
             // ---- pembukuan: transaksi pembayaran terakhir untuk cicilan ini

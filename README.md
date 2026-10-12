@@ -68,7 +68,8 @@ berikutnya, otomatis sekali sehari. Saat pembayaran angka denda bisa diubah manu
 
 `Menunggu` (Teller/Admin buat pengajuan) → `Disetujui, belum dicairkan` (Admin) → **Teller** menekan
 *Proses Pencairan* di halaman Status Pencairan dan wajib mengunggah foto nasabah → `Aktif`
-(jadwal angsuran dibuat dari tanggal pencairan) → `Lunas` (bisa cetak Bukti Pelunasan).
+(jadwal angsuran dibuat saat pencairan; jatuh tempo dihitung dari **tanggal pengajuan**, bisa diganti lewat
+`JADWAL_DARI_PENGAJUAN` di `includes/pinjaman_helper.php`) → `Lunas` (bisa cetak Bukti Pelunasan).
 Foto nasabah juga menjadi foto profil anggota dan foto di sidebar anggota.
 
 ## Catatan revisi Oktober 2026

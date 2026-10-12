@@ -590,6 +590,7 @@ function formatRupiah($angka) {
                                                            title="Cetak Bukti Pembayaran">
                                                             <i class="fas fa-print"></i>
                                                         </a>
+                                                        <?php if (isAdmin() || date('Y-m-d', strtotime($angsuran['tanggal_bayar'])) === date('Y-m-d')): ?>
                                                         <button type="button" class="btn btn-sm btn-outline-danger ms-1" data-bs-toggle="modal"
                                                                 data-bs-target="#batalModal"
                                                                 data-id="<?php echo (int) $angsuran['id']; ?>"
@@ -599,6 +600,7 @@ function formatRupiah($angka) {
                                                                 title="Batalkan pembayaran (koreksi)">
                                                             <i class="fas fa-undo"></i>
                                                         </button>
+                                                        <?php endif; ?>
                                                     <?php endif; ?>
                                                 </td>
                                             </tr>
@@ -684,7 +686,8 @@ function formatRupiah($angka) {
                         <div class="alert alert-info mb-0">
                             <small><i class="fas fa-info-circle me-1"></i>
                             Cicilan kembali <strong>belum bayar</strong>, kas dan saldo dikurangi sebesar nominal tercatat,
-                            dan koreksi ini dicatat (siapa &amp; alasannya). Cicilan bisa dibayar ulang setelahnya.</small>
+                            dan koreksi ini dicatat (siapa &amp; alasannya). Cicilan bisa dibayar ulang setelahnya.
+                            <?php if (isTeller()): ?><br>Teller hanya dapat membatalkan pembayaran yang dicatat hari ini.<?php endif; ?></small>
                         </div>
                     </div>
                     <div class="modal-footer">

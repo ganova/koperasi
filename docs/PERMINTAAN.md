@@ -75,6 +75,16 @@ tertahan `aktif` karena sisa pembulatan 0,01); `teller/ubah_password.php` kini c
 
 Tidak ada migrasi baru untuk Permintaan 4.
 
+## Permintaan 5 — masukan klien (screenshot, 12 Okt 2026, lanjutan)
+
+| # | Isi | Status |
+|---|---|---|
+| 5.1 | Level Teller: tombol **Batalkan Pembayaran** seperti level Admin (modal + alasan wajib). Pembatasan keputusan saya: Teller hanya untuk pembayaran yang dicatat **hari ini**; koreksi lebih lama oleh Admin | Selesai |
+| 5.2 | Jatuh tempo angsuran mengikuti **tanggal pengajuan/pendaftaran** (bukan tanggal pencairan). Tanggal pencairan tetap hari pencairan. Bertentangan dengan brief tahap 2 (jatuh tempo dari tanggal pencairan); bisa dikembalikan lewat `JADWAL_DARI_PENGAJUAN` di `includes/pinjaman_helper.php` | Selesai |
+
+Catatan 5.2: bila pengajuan didaftarkan jauh sebelum pencairan, sebagian cicilan langsung terlambat dan kena denda
+otomatis (contoh uji: daftar 9/9, cair 12/10 -> 4 cicilan terlambat, denda Rp 39.000 pada hari pencairan).
+
 ## Hal bawaan (bukan permintaan klien)
 
 Banner "Database belum di-update", README, repo GitHub, `sql_mode` per koneksi di `config/config.php`,

@@ -64,7 +64,8 @@ if ($_POST && isset($_POST['proses_pencairan'])) {
         }
 
         $foto_path = simpanFotoUpload($foto, 'pencairan');
-        $pinjaman_id = buatPinjamanDanJadwal($db, $pengajuan, date('Y-m-d'));
+        // Jatuh tempo mengikuti tanggal pengajuan (JADWAL_DARI_PENGAJUAN); tanggal pencairan = hari ini
+        $pinjaman_id = buatPinjamanDanJadwal($db, $pengajuan, tanggalMulaiJadwal($pengajuan), date('Y-m-d'));
         if (!$pinjaman_id) {
             throw new Exception("Pinjaman gagal dibuat");
         }
@@ -73,7 +74,8 @@ if ($_POST && isset($_POST['proses_pencairan'])) {
         $db->prepare("UPDATE pengajuan_pinjaman SET status = 'dicairkan' WHERE id = ?")->execute([$id]);
 
         $db->commit();
-        $_SESSION['success'] = "Pinjaman berhasil dicairkan. Jadwal angsuran sudah dibuat dari tanggal pencairan hari ini.";
+        $_SESSION['success'] = "Pinjaman berhasil dicairkan. Jadwal angsuran sudah dibuat, jatuh tempo dihitung dari "
+            . (JADWAL_DARI_PENGAJUAN ? "tanggal pengajuan (" . date('d/m/Y', strtotime(tanggalMulaiJadwal($pengajuan))) . ")" : "tanggal pencairan hari ini") . ".";
     } catch (Exception $e) {
         if ($db->inTransaction()) {
             $db->rollBack();
@@ -187,7 +189,7 @@ $stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchCo
                         <div>
                             <h6 class="alert-heading mb-1">Informasi Akses</h6>
                             <p class="mb-0">Pengajuan yang sudah disetujui Admin menunggu diproses di sini.
-                            <strong>Teller menekan "Proses Pencairan" dan wajib mengunggah foto nasabah</strong>; jadwal angsuran dibuat dari tanggal pencairan.</p>
+                            <strong>Teller menekan "Proses Pencairan" dan wajib mengunggah foto nasabah</strong>; jadwal angsuran dibuat saat itu, jatuh tempo dihitung dari <?php echo JADWAL_DARI_PENGAJUAN ? 'tanggal pengajuan' : 'tanggal pencairan'; ?>.</p>
                         </div>
                     </div>
                 </div>
@@ -383,6 +385,7 @@ $stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchCo
                                                     data-nama="<?php echo htmlspecialchars($pengajuan['nama_lengkap']); ?>"
                                                     data-kode="<?php echo htmlspecialchars($pengajuan['kode_pengajuan']); ?>"
                                                     data-jumlah="<?php echo $pengajuan['jumlah_pinjaman']; ?>"
+                                                    data-mulai="<?php echo date('d/m/Y', strtotime(tanggalMulaiJadwal($pengajuan))); ?>"
                                                     data-ringkas="<?php echo htmlspecialchars(labelTenorRow($pengajuan) . ' | ' . ringkasanAngsuran(hitungDariPinjaman($pengajuan))); ?>">
                                                 <i class="fas fa-hand-holding-usd me-1"></i>Proses Pencairan
                                             </button>
@@ -599,7 +602,8 @@ $stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchCo
                         </div>
                         <div class="alert alert-info mb-0">
                             <i class="fas fa-info-circle me-1"></i>
-                            Jadwal angsuran dibuat otomatis dengan jatuh tempo dihitung dari <strong>hari ini</strong> (tanggal pencairan).
+                            Jadwal angsuran dibuat otomatis, jatuh tempo dihitung dari
+                            <strong><?php echo JADWAL_DARI_PENGAJUAN ? 'tanggal pengajuan' : 'hari ini'; ?> (<span id="pencairan_mulai"></span>)</strong>.
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -624,6 +628,7 @@ $stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchCo
             document.getElementById('pencairan_kode').textContent = b.getAttribute('data-kode');
             document.getElementById('pencairan_jumlah').textContent = 'Rp ' + Number(b.getAttribute('data-jumlah')).toLocaleString('id-ID');
             document.getElementById('pencairan_ringkas').textContent = b.getAttribute('data-ringkas');
+            document.getElementById('pencairan_mulai').textContent = b.getAttribute('data-mulai');
             document.getElementById('foto_nasabah').value = '';
             document.getElementById('foto_nasabah_preview').classList.add('d-none');
         });
