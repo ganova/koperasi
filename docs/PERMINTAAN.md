@@ -85,6 +85,13 @@ Tidak ada migrasi baru untuk Permintaan 4.
 Catatan 5.2: bila pengajuan didaftarkan jauh sebelum pencairan, sebagian cicilan langsung terlambat dan kena denda
 otomatis (contoh uji: daftar 9/9, cair 12/10 -> 4 cicilan terlambat, denda Rp 39.000 pada hari pencairan).
 
+**Pertanyaan terbuka 5.2 (12 Okt 2026):** klien membantah dugaan bahwa ia mengubah tanggal komputer; ia mengaku
+mengisi kolom "tanggal pendaftaran" di form. Di aplikasi, kolom itu hanya ada sebagai **Tanggal Daftar anggota**
+(Tambah Anggota). Form pengajuan tidak punya kolom tanggal, sehingga implementasi saat ini (tanggal pengajuan =
+waktu sekarang) tidak mengubah hasil tesnya. Menunggu keputusan klien: (1) pakai tanggal daftar anggota,
+(2) tambah kolom Tanggal Pengajuan di form pengajuan (rekomendasi), atau (3) kembali ke tanggal pencairan.
+Poin 5.1 (batas Teller hanya hari ini) juga masih dicek klien.
+
 ## Hal bawaan (bukan permintaan klien)
 
 Banner "Database belum di-update", README, repo GitHub, `sql_mode` per koneksi di `config/config.php`,
