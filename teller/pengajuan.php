@@ -67,16 +67,28 @@ if ($_POST && isset($_POST['ajukan_pinjaman'])) {
             throw new Exception("Frekuensi angsuran tidak diizinkan untuk jenis pinjaman ini");
         }
 
+        // Tanggal pengajuan (boleh lampau untuk data lama, tidak boleh masa depan)
+        $tgl_ajuan = isset($_POST['tanggal_pengajuan']) ? trim($_POST['tanggal_pengajuan']) : date('Y-m-d');
+        $dt = DateTime::createFromFormat('Y-m-d', $tgl_ajuan);
+        if (!$dt || $dt->format('Y-m-d') !== $tgl_ajuan) {
+            throw new Exception("Tanggal pengajuan tidak valid");
+        }
+        if ($tgl_ajuan > date('Y-m-d')) {
+            throw new Exception("Tanggal pengajuan tidak boleh di masa depan");
+        }
+        $waktu_ajuan = $tgl_ajuan . ' ' . date('H:i:s');
+
         // Generate kode pengajuan
         // Maks. 20 karakter (= panjang kolom); format lama 22 karakter ditolak MySQL strict mode
         $kode_pengajuan = 'PJG-' . date('ymdHis') . '-' . str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
 
         // Insert pengajuan (skema flat)
         $query = "INSERT INTO pengajuan_pinjaman (kode_pengajuan, anggota_id, jenis_pinjaman_id,
-                  jumlah_pinjaman, tenor, bunga, skema_bunga, frekuensi, tujuan_pinjaman, user_id)
+                  jumlah_pinjaman, tenor, bunga, skema_bunga, frekuensi, tujuan_pinjaman, user_id, tanggal_pengajuan)
                   VALUES (:kode_pengajuan, :anggota_id, :jenis_pinjaman_id,
-                  :jumlah_pinjaman, :tenor, :bunga, 'flat', :frekuensi, :tujuan_pinjaman, :user_id)";
+                  :jumlah_pinjaman, :tenor, :bunga, 'flat', :frekuensi, :tujuan_pinjaman, :user_id, :tanggal_pengajuan)";
         $stmt = $db->prepare($query);
+        $stmt->bindParam(':tanggal_pengajuan', $waktu_ajuan);
         $stmt->bindParam(':kode_pengajuan', $kode_pengajuan);
         $stmt->bindParam(':anggota_id', $anggota_id);
         $stmt->bindParam(':jenis_pinjaman_id', $jenis_pinjaman_id);
@@ -360,6 +372,13 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                         </div>
                                     </div>
                                     
+                                    <div class="mb-3">
+                                        <label class="form-label">Tanggal Pengajuan *</label>
+                                        <input type="date" name="tanggal_pengajuan" class="form-control" required
+                                               value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>">
+                                        <small class="text-muted">Isi tanggal lama bila ini data nasabah yang sudah mengajukan sebelumnya.</small>
+                                    </div>
+
                                     <div class="mb-3">
                                         <label class="form-label">Tujuan Pinjaman *</label>
                                         <textarea name="tujuan_pinjaman" class="form-control" rows="3" required

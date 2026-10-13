@@ -63,19 +63,48 @@ if ($_POST && isset($_POST['proses_pencairan'])) {
             throw new Exception("Pengajuan ini sudah dicairkan");
         }
 
+        // Tanggal pencairan diisi Teller (boleh tanggal lampau untuk data lama, tidak boleh masa depan
+        // dan tidak boleh sebelum tanggal pengajuan). Jatuh tempo dihitung dari tanggal ini.
+        $tgl_cair = isset($_POST['tanggal_pencairan']) ? trim($_POST['tanggal_pencairan']) : '';
+        $dt = DateTime::createFromFormat('Y-m-d', $tgl_cair);
+        if (!$dt || $dt->format('Y-m-d') !== $tgl_cair) {
+            throw new Exception("Tanggal pencairan tidak valid");
+        }
+        if ($tgl_cair > date('Y-m-d')) {
+            throw new Exception("Tanggal pencairan tidak boleh di masa depan");
+        }
+        if ($tgl_cair < date('Y-m-d', strtotime($pengajuan['tanggal_pengajuan']))) {
+            throw new Exception("Tanggal pencairan tidak boleh lebih awal dari tanggal pengajuan ("
+                . date('d/m/Y', strtotime($pengajuan['tanggal_pengajuan'])) . ")");
+        }
+        $mundur = $tgl_cair < date('Y-m-d') ? 1 : 0;
+
+        $jumlah_cicilan = hitungDariPinjaman($pengajuan)['jumlah_cicilan'];
+        $sudah_dibayar = isset($_POST['sudah_dibayar']) && $_POST['sudah_dibayar'] !== '' ? (int) $_POST['sudah_dibayar'] : 0;
+        if ($sudah_dibayar < 0 || $sudah_dibayar > $jumlah_cicilan) {
+            throw new Exception("Cicilan yang sudah dibayar harus 0 sampai $jumlah_cicilan");
+        }
+        if ($sudah_dibayar > 0 && !$mundur) {
+            throw new Exception("Cicilan yang sudah dibayar hanya untuk pencairan dengan tanggal lampau");
+        }
+
         $foto_path = simpanFotoUpload($foto, 'pencairan');
-        // Jatuh tempo mengikuti tanggal pengajuan (JADWAL_DARI_PENGAJUAN); tanggal pencairan = hari ini
-        $pinjaman_id = buatPinjamanDanJadwal($db, $pengajuan, tanggalMulaiJadwal($pengajuan), date('Y-m-d'));
+        $pinjaman_id = buatPinjamanDanJadwal($db, $pengajuan, $tgl_cair, $tgl_cair);
         if (!$pinjaman_id) {
             throw new Exception("Pinjaman gagal dibuat");
         }
-        $db->prepare("UPDATE pinjaman SET foto_pencairan = ?, dicairkan_oleh = ? WHERE id = ?")
-           ->execute([$foto_path, $_SESSION['user_id'], $pinjaman_id]);
+        $db->prepare("UPDATE pinjaman SET foto_pencairan = ?, dicairkan_oleh = ?, input_mundur = ? WHERE id = ?")
+           ->execute([$foto_path, $_SESSION['user_id'], $mundur, $pinjaman_id]);
+        tandaiCicilanDimuka($db, $pinjaman_id, $sudah_dibayar);
         $db->prepare("UPDATE pengajuan_pinjaman SET status = 'dicairkan' WHERE id = ?")->execute([$id]);
 
         $db->commit();
-        $_SESSION['success'] = "Pinjaman berhasil dicairkan. Jadwal angsuran sudah dibuat, jatuh tempo dihitung dari "
-            . (JADWAL_DARI_PENGAJUAN ? "tanggal pengajuan (" . date('d/m/Y', strtotime(tanggalMulaiJadwal($pengajuan))) . ")" : "tanggal pencairan hari ini") . ".";
+        // Cicilan lama yang sudah lewat jatuh tempo dan belum dibayar langsung kena denda sesuai jatuh tempo aslinya
+        perbaruiDendaOtomatis($db, true);
+        $_SESSION['success'] = "Pinjaman berhasil dicairkan tanggal " . date('d/m/Y', strtotime($tgl_cair))
+            . ". Jadwal angsuran dibuat dari tanggal tersebut"
+            . ($sudah_dibayar > 0 ? ", cicilan 1-$sudah_dibayar ditandai sudah dibayar (tidak masuk kas)" : "")
+            . ($mundur ? " (input mundur)" : "") . ".";
     } catch (Exception $e) {
         if ($db->inTransaction()) {
             $db->rollBack();
@@ -385,7 +414,9 @@ $stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchCo
                                                     data-nama="<?php echo htmlspecialchars($pengajuan['nama_lengkap']); ?>"
                                                     data-kode="<?php echo htmlspecialchars($pengajuan['kode_pengajuan']); ?>"
                                                     data-jumlah="<?php echo $pengajuan['jumlah_pinjaman']; ?>"
-                                                    data-mulai="<?php echo date('d/m/Y', strtotime(tanggalMulaiJadwal($pengajuan))); ?>"
+                                                    data-tgl-pengajuan="<?php echo date('Y-m-d', strtotime($pengajuan['tanggal_pengajuan'])); ?>"
+                                                    data-cicilan="<?php echo (int) hitungDariPinjaman($pengajuan)['jumlah_cicilan']; ?>"
+                                                    data-frekuensi="<?php echo htmlspecialchars(isset($pengajuan['frekuensi']) ? $pengajuan['frekuensi'] : 'bulanan'); ?>"
                                                     data-ringkas="<?php echo htmlspecialchars(labelTenorRow($pengajuan) . ' | ' . ringkasanAngsuran(hitungDariPinjaman($pengajuan))); ?>">
                                                 <i class="fas fa-hand-holding-usd me-1"></i>Proses Pencairan
                                             </button>
@@ -600,10 +631,21 @@ $stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchCo
                             <small class="text-muted">JPG/PNG/WEBP, maksimal 10 MB. Di HP bisa langsung memotret.</small>
                             <img id="foto_nasabah_preview" class="img-thumbnail mt-2 d-none" style="max-height:160px" alt="Pratinjau foto">
                         </div>
-                        <div class="alert alert-info mb-0">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Tanggal Pencairan <span class="text-danger">*</span></label>
+                            <input type="date" name="tanggal_pencairan" id="tanggal_pencairan" class="form-control" required
+                                   value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>">
+                            <small class="text-muted">Isi tanggal lama bila ini data nasabah yang sudah cair sebelumnya. Jatuh tempo dihitung dari tanggal ini.</small>
+                        </div>
+                        <div class="mb-3 d-none" id="blok_dimuka">
+                            <label class="form-label fw-semibold">Sudah dibayar sampai cicilan ke-</label>
+                            <input type="number" name="sudah_dibayar" id="sudah_dibayar" class="form-control" min="0" value="0">
+                            <small class="text-muted" id="info_dimuka"></small>
+                        </div>
+                        <div class="alert alert-info mb-0" id="info_jadwal">
                             <i class="fas fa-info-circle me-1"></i>
-                            Jadwal angsuran dibuat otomatis, jatuh tempo dihitung dari
-                            <strong><?php echo JADWAL_DARI_PENGAJUAN ? 'tanggal pengajuan' : 'hari ini'; ?> (<span id="pencairan_mulai"></span>)</strong>.
+                            Jadwal angsuran dibuat otomatis dari tanggal pencairan. Cicilan lama yang ditandai sudah dibayar
+                            tidak masuk kas; cicilan lewat jatuh tempo yang belum dibayar langsung kena denda.
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -628,9 +670,22 @@ $stats['dicairkan'] = (int) $db->query("SELECT COUNT(*) FROM pinjaman")->fetchCo
             document.getElementById('pencairan_kode').textContent = b.getAttribute('data-kode');
             document.getElementById('pencairan_jumlah').textContent = 'Rp ' + Number(b.getAttribute('data-jumlah')).toLocaleString('id-ID');
             document.getElementById('pencairan_ringkas').textContent = b.getAttribute('data-ringkas');
-            document.getElementById('pencairan_mulai').textContent = b.getAttribute('data-mulai');
+            var tgl = document.getElementById('tanggal_pencairan');
+            tgl.min = b.getAttribute('data-tgl-pengajuan');
+            tgl.value = tgl.max;
+            var n = b.getAttribute('data-cicilan');
+            var sd = document.getElementById('sudah_dibayar');
+            sd.max = n; sd.value = 0;
+            document.getElementById('info_dimuka').textContent = 'Isi 0 bila belum ada cicilan yang dibayar. Maksimal ' + n +
+                ' (' + (b.getAttribute('data-frekuensi') === 'mingguan' ? 'mingguan' : 'bulanan') + ').';
+            tgl.dispatchEvent(new Event('change'));
             document.getElementById('foto_nasabah').value = '';
             document.getElementById('foto_nasabah_preview').classList.add('d-none');
+        });
+        document.getElementById('tanggal_pencairan').addEventListener('change', function () {
+            var mundur = this.value && this.value < this.max;
+            document.getElementById('blok_dimuka').classList.toggle('d-none', !mundur);
+            if (!mundur) { document.getElementById('sudah_dibayar').value = 0; }
         });
         document.getElementById('foto_nasabah').addEventListener('change', function () {
             var img = document.getElementById('foto_nasabah_preview');

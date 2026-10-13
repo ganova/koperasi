@@ -187,6 +187,13 @@ $sidebar_pakai_avatar = in_array($current_role, ['anggota', 'teller'], true);
                                 <?php if (($n_pembatalan = jumlahPengajuanPembatalan($db)) > 0): ?>
                                     <span class="badge bg-warning text-dark ms-1" title="Pengajuan pembatalan menunggu keputusan Admin"><?php echo $n_pembatalan; ?></span>
                                 <?php endif; ?>
+                                <?php $kp = isTeller() ? jumlahKeputusanPembatalanTeller($db, $_SESSION['user_id']) : array('disetujui' => 0, 'ditolak' => 0); ?>
+                                <?php if ($kp['disetujui'] > 0): ?>
+                                    <span class="badge bg-success ms-1" title="Pengajuan pembatalan disetujui Admin"><?php echo $kp['disetujui']; ?></span>
+                                <?php endif; ?>
+                                <?php if ($kp['ditolak'] > 0): ?>
+                                    <span class="badge bg-danger ms-1" title="Pengajuan pembatalan ditolak Admin"><?php echo $kp['ditolak']; ?></span>
+                                <?php endif; ?>
                             </a>
                         </li>
                         <li class="nav-item">

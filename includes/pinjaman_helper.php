@@ -205,9 +205,9 @@ if (!function_exists('hitungDariPinjaman')) {
 }
 
 if (!defined('JADWAL_DARI_PENGAJUAN')) {
-    // true  : jatuh tempo cicilan dihitung dari tanggal PENGAJUAN/pendaftaran (permintaan klien, 12 Okt 2026)
-    // false : dihitung dari tanggal pencairan (brief tahap 2). Cukup ubah nilai ini.
-    define('JADWAL_DARI_PENGAJUAN', true);
+    // false : jatuh tempo dihitung dari TANGGAL PENCAIRAN yang diisi Teller (jawaban klien, 13 Okt 2026)
+    // true  : dari tanggal pengajuan. Cukup ubah nilai ini.
+    define('JADWAL_DARI_PENGAJUAN', false);
 }
 
 if (!function_exists('tanggalMulaiJadwal')) {
@@ -274,6 +274,33 @@ if (!function_exists('buatPinjamanDanJadwal')) {
         }
 
         return $pinjaman_id;
+    }
+}
+
+if (!function_exists('tandaiCicilanDimuka')) {
+    /**
+     * Data lama: cicilan 1..$sampai_ke ditandai sudah dibayar sebelum memakai aplikasi.
+     * Tanggal bayar = jatuh tempo; TIDAK ada transaksi/kas (uangnya sudah diterima dan dicatat di Excel lama).
+     * Sisa pokok dikurangi. Dipanggil di dalam transaksi.
+     */
+    function tandaiCicilanDimuka($db, $pinjaman_id, $sampai_ke) {
+        $sampai_ke = (int) $sampai_ke;
+        if ($sampai_ke <= 0) {
+            return;
+        }
+        $stmt = $db->prepare("SELECT COALESCE(SUM(pokok), 0) FROM angsuran WHERE pinjaman_id = ? AND angsuran_ke <= ?");
+        $stmt->execute([$pinjaman_id, $sampai_ke]);
+        $pokok = (float) $stmt->fetchColumn();
+
+        $set = "status = 'lunas', tanggal_bayar = tanggal_jatuh_tempo, denda = 0, keterlambatan_hari = 0";
+        if (kolomAda($db, 'angsuran', 'denda_manual')) {
+            $set .= ", denda_manual = 0";
+        }
+        $db->prepare("UPDATE angsuran SET $set WHERE pinjaman_id = ? AND angsuran_ke <= ?")
+           ->execute([$pinjaman_id, $sampai_ke]);
+        $db->prepare("UPDATE pinjaman SET sisa_pokok = GREATEST(sisa_pokok - ?, 0), cicilan_dimuka = ? WHERE id = ?")
+           ->execute([$pokok, $sampai_ke, $pinjaman_id]);
+        tandaiLunasBilaSelesai($db, $pinjaman_id);
     }
 }
 

@@ -40,6 +40,10 @@ Aplikasi koperasi simpan pinjam (PHP + MySQL) dengan 3 level login: Admin, Telle
    ```bash
    mysql -u root koperasi_db < database/migrations/2026_10_revisi_tahap3.sql
    ```
+   Dan migrasi **input data lama / tanggal mundur**, juga **sekali saja**:
+   ```bash
+   mysql -u root koperasi_db < database/migrations/2026_10d_input_mundur.sql
+   ```
 4. Sesuaikan koneksi database di `config/database.php` bila user/password MySQL berbeda.
 5. Atur `php.ini` lalu restart Apache:
    ```ini
@@ -64,7 +68,7 @@ tidak tersimpan. Jalankan migrasinya sekali (bisa juga lewat phpMyAdmin → data
 
 ## Pembatalan pembayaran angsuran
 
-Teller **tidak** membatalkan sendiri: pada angsuran Lunas ia menekan *Ajukan Pembatalan* (alasan wajib). Pembayaran
+Teller **tidak** membatalkan sendiri: pada angsuran Lunas yang dibayar **hari ini** (pembayaran hari sebelumnya tidak bisa diajukan) ia menekan *Ajukan Pembatalan* (alasan wajib). Pembayaran
 belum dibalik sampai Admin memutuskan di halaman Pembayaran Angsuran: *Approve* (pembayaran dibatalkan, kas/saldo
 dikoreksi) atau *Tolak* (angsuran tetap Lunas). Admin juga masih bisa *Batalkan Pembayaran* langsung.
 
@@ -78,8 +82,8 @@ berikutnya, otomatis sekali sehari. Saat pembayaran angka denda bisa diubah manu
 
 `Menunggu` (Teller/Admin buat pengajuan) → `Disetujui, belum dicairkan` (Admin) → **Teller** menekan
 *Proses Pencairan* di halaman Status Pencairan dan wajib mengunggah foto nasabah → `Aktif`
-(jadwal angsuran dibuat saat pencairan; jatuh tempo dihitung dari **tanggal pengajuan**, bisa diganti lewat
-`JADWAL_DARI_PENGAJUAN` di `includes/pinjaman_helper.php`) → `Lunas` (bisa cetak Bukti Pelunasan).
+(jadwal angsuran dibuat saat pencairan; jatuh tempo dihitung dari **tanggal pencairan** yang diisi Teller. Untuk data
+lama isi tanggal lampau dan "sudah dibayar sampai cicilan ke-N"; cicilan itu Lunas tanpa masuk kas, sisanya yang telat kena denda) → `Lunas` (bisa cetak Bukti Pelunasan).
 Foto nasabah juga menjadi foto profil anggota dan foto di sidebar anggota.
 
 ## Catatan revisi Oktober 2026

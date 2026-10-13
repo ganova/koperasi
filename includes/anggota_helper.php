@@ -149,7 +149,7 @@ if (!function_exists('migrasiRevisiBelumDijalankan')) {
                 ['angsuran', 'cara_bayar'], ['pinjaman', 'foto_pencairan'],
                 ['pinjaman', 'tanggal_lunas'], ['users', 'foto_profil'],
                 ['angsuran', 'denda_manual'], ['denda_tarif', 'denda_per_hari'],
-                ['pengajuan_pembatalan_angsuran', 'aktif'],
+                ['pengajuan_pembatalan_angsuran', 'aktif'], ['pinjaman', 'input_mundur'], ['pengajuan_pembatalan_angsuran', 'dilihat_teller'],
             ];
             $ada = 0;
             $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS

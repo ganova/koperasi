@@ -104,6 +104,19 @@ Migrasi: `database/migrations/2026_10_revisi_tahap3.sql`.
 Perbedaan form Admin vs Teller yang ditemukan (poin 2): kode manual di modal Teller; Tanggal Daftar edit read-only di Admin tapi
 editable (tidak tersimpan) di Teller; cek KTP wajib/unik hanya di Admin.
 
+## Permintaan 7 — input data lama (tanggal mundur) + penyempurnaan pembatalan (13 Okt 2026) [di luar cakupan P1]
+
+Jawaban klien atas pertanyaan 5.2: jatuh tempo mengikuti **tanggal cair**, tanggal pengajuan dan pencairan harus bisa diisi
+(data nasabah lama, mis. pengajuan 9/9/2026) supaya tidak dicatat di Excel lagi. Disetujui klien: cicilan lama yang sudah dibayar
+ditandai lunas tanpa masuk kas, denda cicilan yang belum dibayar tetap berjalan dari jatuh tempo asli, foto nasabah tetap **wajib**.
+
+| # | Isi | Status |
+|---|---|---|
+| 7.1 | Kolom Tanggal Pengajuan (form pengajuan Teller) dan Tanggal Pencairan (Proses Pencairan); default hari ini, tidak boleh masa depan, pencairan tidak boleh sebelum pengajuan. Jatuh tempo dari tanggal pencairan (`JADWAL_DARI_PENGAJUAN` = false; **menggantikan 5.2**) | Selesai |
+| 7.2 | "Sudah dibayar sampai cicilan ke-N" (muncul bila tanggal pencairan lampau): cicilan 1..N Lunas, tanggal bayar = jatuh tempo, tanpa transaksi/kas, sisa pokok berkurang; sisanya yang lewat jatuh tempo otomatis telat + denda dari jatuh tempo asli. Penanda `pinjaman.input_mundur`, `cicilan_dimuka` (migrasi `2026_10d_input_mundur.sql`). Uji: 1 jt mingguan cair 9/9, dibayar sampai ke-3, dicek 13/10 -> ke-4 telat 6 hari, denda Rp 9.000 | Selesai |
+| 7.3 | Teller hanya bisa **mengajukan pembatalan untuk pembayaran hari ini** (tombol hilang untuk hari sebelumnya, dicek juga di server) | Selesai |
+| 7.4 | Status pembatalan di daftar angsuran: kuning = menunggu, hijau = Disetujui (Approve Admin), merah = Ditolak Admin. Menu Angsuran Teller: indikator hijau/merah + jumlah keputusan Admin yang belum dilihat (hilang setelah halaman Angsuran dibuka; kolom `dilihat_teller`) | Selesai |
+
 ## Hal bawaan (bukan permintaan klien)
 
 Banner "Database belum di-update", README, repo GitHub, `sql_mode` per koneksi di `config/config.php`,

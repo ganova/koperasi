@@ -145,6 +145,40 @@ if (!function_exists('batalkanPembayaranAngsuran')) {
     }
 }
 
+if (!function_exists('bisaDiajukanPembatalan')) {
+    /** Teller hanya boleh mengajukan pembatalan untuk pembayaran yang dilakukan hari ini. */
+    function bisaDiajukanPembatalan($tanggal_bayar) {
+        return !empty($tanggal_bayar) && date('Y-m-d', strtotime($tanggal_bayar)) === date('Y-m-d');
+    }
+}
+
+if (!function_exists('jumlahKeputusanPembatalanTeller')) {
+    /** Keputusan Admin yang belum dilihat Teller: ['disetujui' => n, 'ditolak' => n]. */
+    function jumlahKeputusanPembatalanTeller($db, $teller_id) {
+        $hasil = array('disetujui' => 0, 'ditolak' => 0);
+        if (!tabelPengajuanPembatalanAda($db) || !kolomAda($db, 'pengajuan_pembatalan_angsuran', 'dilihat_teller')) {
+            return $hasil;
+        }
+        $stmt = $db->prepare("SELECT status, COUNT(*) FROM pengajuan_pembatalan_angsuran
+                              WHERE teller_id = ? AND dilihat_teller = 0 AND status IN ('disetujui', 'ditolak') GROUP BY status");
+        $stmt->execute(array($teller_id));
+        foreach ($stmt->fetchAll(PDO::FETCH_NUM) as $r) {
+            $hasil[$r[0]] = (int) $r[1];
+        }
+        return $hasil;
+    }
+}
+
+if (!function_exists('tandaiKeputusanPembatalanDilihat')) {
+    function tandaiKeputusanPembatalanDilihat($db, $teller_id) {
+        if (!tabelPengajuanPembatalanAda($db) || !kolomAda($db, 'pengajuan_pembatalan_angsuran', 'dilihat_teller')) {
+            return;
+        }
+        $db->prepare("UPDATE pengajuan_pembatalan_angsuran SET dilihat_teller = 1
+                      WHERE teller_id = ? AND dilihat_teller = 0 AND status <> 'menunggu'")->execute(array($teller_id));
+    }
+}
+
 if (!function_exists('ajukanPembatalanAngsuran')) {
     /**
      * Teller mengajukan pembatalan pembayaran. Pembayaran TIDAK dibalik.
@@ -169,11 +203,14 @@ if (!function_exists('ajukanPembatalanAngsuran')) {
         $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         try {
             $db->beginTransaction();
-            $stmt = $db->prepare("SELECT status FROM angsuran WHERE id = ? FOR UPDATE");
+            $stmt = $db->prepare("SELECT status, tanggal_bayar FROM angsuran WHERE id = ? FOR UPDATE");
             $stmt->execute([$angsuran_id]);
-            $status = $stmt->fetchColumn();
-            if ($status !== 'lunas') {
+            $ang = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$ang || $ang['status'] !== 'lunas') {
                 throw new Exception("Angsuran ini belum dibayar, tidak ada pembayaran yang bisa dibatalkan");
+            }
+            if (!bisaDiajukanPembatalan($ang['tanggal_bayar'])) {
+                throw new Exception("Pembatalan hanya bisa diajukan pada hari pembayaran (hari ini). Pembayaran tanggal sebelumnya tidak bisa diajukan pembatalan");
             }
             $stmt = $db->prepare("SELECT COUNT(*) FROM pengajuan_pembatalan_angsuran WHERE angsuran_id = ? AND status = 'menunggu'");
             $stmt->execute([$angsuran_id]);

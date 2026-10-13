@@ -614,10 +614,10 @@ function formatRupiah($angka) {
                                                         <span class="badge bg-danger">Belum Bayar</span>
                                                     <?php endif; ?>
                                                     <?php if ($pb && $pb['status'] === 'ditolak' && $angsuran['status'] == 'lunas'): ?>
-                                                        <br><span class="badge bg-danger" title="<?php echo htmlspecialchars($pb['catatan_admin']); ?>">Pembatalan Ditolak</span>
+                                                        <br><span class="badge bg-danger" title="<?php echo htmlspecialchars($pb['catatan_admin']); ?>">Pembatalan Ditolak Admin</span>
                                                         <?php if (!empty($pb['catatan_admin'])): ?><br><small class="text-muted"><?php echo htmlspecialchars($pb['catatan_admin']); ?></small><?php endif; ?>
                                                     <?php elseif ($pb && $pb['status'] === 'disetujui' && $angsuran['status'] != 'lunas'): ?>
-                                                        <br><span class="badge bg-info" title="<?php echo htmlspecialchars($pb['catatan_admin']); ?>">Pembatalan Disetujui</span>
+                                                        <br><span class="badge bg-success" title="<?php echo htmlspecialchars($pb['catatan_admin']); ?>">Pembatalan Disetujui (Approve Admin)</span>
                                                         <?php if (!empty($pb['catatan_admin'])): ?><br><small class="text-muted"><?php echo htmlspecialchars($pb['catatan_admin']); ?></small><?php endif; ?>
                                                     <?php endif; ?>
                                                 </td>
@@ -668,7 +668,7 @@ function formatRupiah($angka) {
                                                                 data-alasan="<?php echo htmlspecialchars($pb['alasan']); ?>" title="Tolak pengajuan">
                                                             <i class="fas fa-times"></i> Tolak
                                                         </button>
-                                                        <?php elseif (isTeller() && !$menunggu): ?>
+                                                        <?php elseif (isTeller() && !$menunggu && bisaDiajukanPembatalan($angsuran['tanggal_bayar'])): ?>
                                                         <button type="button" class="btn btn-sm btn-outline-warning ms-1" data-bs-toggle="modal" data-bs-target="#ajukanModal"
                                                                 data-id="<?php echo (int) $angsuran['id']; ?>" <?php echo $data_baris; ?>
                                                                 title="Ajukan pembatalan pembayaran ke Admin">
@@ -930,5 +930,6 @@ function formatRupiah($angka) {
             }
         });
     </script>
+<?php if (isTeller()) { tandaiKeputusanPembatalanDilihat($db, $_SESSION['user_id']); } ?>
 </body>
 </html>
