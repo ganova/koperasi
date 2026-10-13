@@ -184,15 +184,16 @@ $sidebar_pakai_avatar = in_array($current_role, ['anggota', 'teller'], true);
                             <a class="nav-link text-white-50 py-1 <?php echo $current_page == 'angsuran.php' ? 'active text-white' : ''; ?>" 
                                href="angsuran.php">
                                 <i class="fas fa-calendar-check me-2"></i> Angsuran
-                                <?php if (($n_pembatalan = jumlahPengajuanPembatalan($db)) > 0): ?>
-                                    <span class="badge bg-warning text-dark ms-1" title="Pengajuan pembatalan menunggu keputusan Admin"><?php echo $n_pembatalan; ?></span>
-                                <?php endif; ?>
+                                <?php $n_pembatalan = jumlahPengajuanPembatalan($db); ?>
                                 <?php $kp = isTeller() ? jumlahKeputusanPembatalanTeller($db, $_SESSION['user_id']) : array('disetujui' => 0, 'ditolak' => 0); ?>
-                                <?php if ($kp['disetujui'] > 0): ?>
-                                    <span class="badge bg-success ms-1" title="Pengajuan pembatalan disetujui Admin"><?php echo $kp['disetujui']; ?></span>
-                                <?php endif; ?>
-                                <?php if ($kp['ditolak'] > 0): ?>
-                                    <span class="badge bg-danger ms-1" title="Pengajuan pembatalan ditolak Admin"><?php echo $kp['ditolak']; ?></span>
+                                <?php if (isTeller()): ?>
+                                    <span class="ms-1 text-nowrap">
+                                        <span class="badge bg-warning text-dark" style="<?php echo $n_pembatalan ? '' : 'opacity:.35'; ?>" title="Pengajuan pembatalan menunggu keputusan Admin"><?php echo $n_pembatalan; ?></span>
+                                        <span class="badge bg-success" style="<?php echo $kp['disetujui'] ? '' : 'opacity:.35'; ?>" title="Pengajuan pembatalan disetujui Admin"><?php echo $kp['disetujui']; ?></span>
+                                        <span class="badge bg-danger" style="<?php echo $kp['ditolak'] ? '' : 'opacity:.35'; ?>" title="Pengajuan pembatalan ditolak Admin"><?php echo $kp['ditolak']; ?></span>
+                                    </span>
+                                <?php elseif ($n_pembatalan > 0): ?>
+                                    <span class="badge bg-warning text-dark ms-1" title="Pengajuan pembatalan menunggu keputusan Admin"><?php echo $n_pembatalan; ?></span>
                                 <?php endif; ?>
                             </a>
                         </li>

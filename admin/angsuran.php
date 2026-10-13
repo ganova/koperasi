@@ -288,6 +288,45 @@ $stmt_pinjaman = $db->prepare($query_pinjaman);
 $stmt_pinjaman->execute();
 $pinjaman_list = $stmt_pinjaman->fetchAll(PDO::FETCH_ASSOC);
 
+// Penanda pengajuan pembatalan per pinjaman: menunggu (kuning), disetujui (hijau), ditolak (merah)
+$jumlah_filter = array('menunggu' => 0, 'disetujui' => 0, 'ditolak' => 0);
+foreach ($pinjaman_list as $i => $pj) {
+    $pinjaman_list[$i]['n_pb'] = array('menunggu' => 0, 'disetujui' => 0, 'ditolak' => 0);
+}
+if (tabelPengajuanPembatalanAda($db) && !empty($pinjaman_list)) {
+    $rows = $db->query("SELECT x.pinjaman_id, pb.status, x.status AS status_angsuran
+                        FROM pengajuan_pembatalan_angsuran pb JOIN angsuran x ON pb.angsuran_id = x.id
+                        WHERE pb.id = (SELECT MAX(id) FROM pengajuan_pembatalan_angsuran WHERE angsuran_id = pb.angsuran_id)")
+                 ->fetchAll(PDO::FETCH_ASSOC);
+    $per_pinjaman = array();
+    foreach ($rows as $r) {
+        $st = $r['status'];
+        if (($st === 'disetujui' && $r['status_angsuran'] === 'lunas') || ($st === 'ditolak' && $r['status_angsuran'] !== 'lunas')) {
+            continue; // keputusan lama yang sudah tidak relevan (cicilan dibayar lagi)
+        }
+        $per_pinjaman[$r['pinjaman_id']][$st] = (isset($per_pinjaman[$r['pinjaman_id']][$st]) ? $per_pinjaman[$r['pinjaman_id']][$st] : 0) + 1;
+    }
+    foreach ($pinjaman_list as $i => $pj) {
+        if (isset($per_pinjaman[$pj['id']])) {
+            foreach ($per_pinjaman[$pj['id']] as $st => $n) {
+                $pinjaman_list[$i]['n_pb'][$st] = $n;
+                $jumlah_filter[$st]++;
+            }
+        }
+    }
+}
+// Filter daftar pinjaman: Admin hanya "menunggu"; Teller menunggu / disetujui / ditolak
+$filter_pb = isset($_GET['filter']) ? $_GET['filter'] : '';
+if (!in_array($filter_pb, isAdmin() ? array('menunggu') : array('menunggu', 'disetujui', 'ditolak'), true)) {
+    $filter_pb = '';
+}
+if ($filter_pb !== '') {
+    $pinjaman_list = array_values(array_filter($pinjaman_list, function ($pj) use ($filter_pb) {
+        return $pj['n_pb'][$filter_pb] > 0;
+    }));
+}
+$qs_filter = $filter_pb !== '' ? '&filter=' . $filter_pb : '';
+
 // Get installments for selected loan
 $angsuran_list = [];
 $pembatalan = [];
@@ -485,6 +524,19 @@ function formatRupiah($angka) {
                                 <small class="text-muted"><?php echo count($pinjaman_list); ?> pinjaman</small>
                             </div>
                             <div class="card-body">
+                                <div class="mb-3 d-flex flex-wrap gap-1">
+                                    <?php
+                                    $chips = isAdmin()
+                                        ? array('menunggu' => array('Pengajuan Pembatalan', 'warning'))
+                                        : array('menunggu' => array('Pengajuan', 'warning'), 'disetujui' => array('Approve', 'success'), 'ditolak' => array('Tolak', 'danger'));
+                                    ?>
+                                    <a href="angsuran.php" class="btn btn-sm <?php echo $filter_pb === '' ? 'btn-secondary' : 'btn-outline-secondary'; ?>">Semua</a>
+                                    <?php foreach ($chips as $kunci => $c): ?>
+                                    <a href="?filter=<?php echo $kunci; ?>" class="btn btn-sm <?php echo $filter_pb === $kunci ? 'btn-' . $c[1] : 'btn-outline-' . $c[1]; ?>">
+                                        <?php echo $c[0]; ?> <span class="badge bg-<?php echo $c[1]; ?> <?php echo $c[1] === 'warning' ? 'text-dark' : ''; ?>"><?php echo $jumlah_filter[$kunci]; ?></span>
+                                    </a>
+                                    <?php endforeach; ?>
+                                </div>
                                 <div class="loan-list">
                                     <?php if (empty($pinjaman_list)): ?>
                                     <div class="text-center py-4">
@@ -497,11 +549,20 @@ function formatRupiah($angka) {
                                         <?php foreach ($pinjaman_list as $pinjaman): 
                                             $progress = $pinjaman['total_angsuran'] > 0 ? ($pinjaman['angsuran_lunas'] / $pinjaman['total_angsuran'] * 100) : 0;
                                         ?>
-                                        <a href="?pinjaman_id=<?php echo $pinjaman['id']; ?>" 
+                                        <a href="?pinjaman_id=<?php echo $pinjaman['id'] . $qs_filter; ?>" 
                                            class="list-group-item list-group-item-action <?php echo isset($_GET['pinjaman_id']) && $_GET['pinjaman_id'] == $pinjaman['id'] ? 'active' : ''; ?>">
                                             <div class="d-flex w-100 justify-content-between">
                                                 <h6 class="mb-1"><?php echo $pinjaman['kode_pinjaman']; ?></h6>
                                                 <div>
+                                                    <?php if ($pinjaman['n_pb']['menunggu'] > 0): ?>
+                                                    <span class="badge bg-warning text-dark" title="Pengajuan pembatalan menunggu keputusan"><i class="fas fa-hourglass-half"></i> <?php echo $pinjaman['n_pb']['menunggu']; ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (isTeller() && $pinjaman['n_pb']['disetujui'] > 0): ?>
+                                                    <span class="badge bg-success" title="Pembatalan disetujui Admin"><i class="fas fa-check"></i> <?php echo $pinjaman['n_pb']['disetujui']; ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (isTeller() && $pinjaman['n_pb']['ditolak'] > 0): ?>
+                                                    <span class="badge bg-danger" title="Pembatalan ditolak Admin"><i class="fas fa-times"></i> <?php echo $pinjaman['n_pb']['ditolak']; ?></span>
+                                                    <?php endif; ?>
                                                     <span class="badge bg-<?php echo $pinjaman['status'] == 'aktif' ? 'success' : ($pinjaman['status'] == 'lunas' ? 'info' : 'danger'); ?>">
                                                         <?php echo $pinjaman['status']; ?>
                                                     </span>
