@@ -17,6 +17,7 @@ cekPostMelebihiBatas();
 // Handle tambah anggota
 if ($_POST) {
     if (isset($_POST['tambah_anggota'])) {
+        kunciKodeAnggota($db); // cegah kode kembar bila Admin/Teller menambah bersamaan
         $kode_anggota = buatKodeAnggota($db); // dibuat server, kiriman form diabaikan
         $nama_lengkap = $_POST['nama_lengkap'];
         $alamat = $_POST['alamat'] ?? '';
@@ -36,6 +37,16 @@ if ($_POST) {
 
             // Validasi dokumen (finfo, maks. 10 MB) sebelum data disimpan
             $dokumen = validasiDokumenAnggota();
+
+            // No. KTP wajib & unik (sama dengan Admin)
+            if (trim($ktp) === '') {
+                throw new Exception("No. KTP harus diisi");
+            }
+            $cek_ktp = $db->prepare("SELECT id FROM anggota WHERE ktp = ?");
+            $cek_ktp->execute([trim($ktp)]);
+            if ($cek_ktp->rowCount() > 0) {
+                throw new Exception("No. KTP sudah terdaftar");
+            }
 
             $check_stmt = $db->prepare("SELECT id FROM users WHERE username = ?");
             $check_stmt->execute([$kode_anggota]);
@@ -92,6 +103,7 @@ if ($_POST) {
             }
             $_SESSION['error'] = "Gagal menambahkan anggota: " . $e->getMessage();
         }
+        lepasKodeAnggota($db);
     }
 }
 
@@ -449,9 +461,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                     <div class="row">
                                         <div class="col-md-6">
                                             <div class="mb-3">
-                                                <label class="form-label">No. KTP</label>
-                                                <input type="text" name="ktp" class="form-control" 
-                                                       placeholder="Masukkan nomor KTP">
+                                                <label class="form-label">No. KTP *</label>
+                                                <input type="text" name="ktp" class="form-control" required maxlength="16"
+                                                       placeholder="16 digit nomor KTP">
                                             </div>
                                         </div>
                                         <div class="col-md-6">

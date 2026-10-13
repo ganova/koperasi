@@ -12,6 +12,7 @@ $kode_otomatis = buatKodeAnggota($db);
 if ($_POST) {
     if (isset($_POST['add'])) {
         // Kode dibuat server (kiriman form diabaikan agar tidak bisa bentrok/diubah)
+        kunciKodeAnggota($db); // dilepas otomatis saat skrip selesai (redirect di akhir proses)
         $kode_anggota = buatKodeAnggota($db);
         $nama_lengkap = trim($_POST['nama_lengkap']);
         $alamat = trim($_POST['alamat']);

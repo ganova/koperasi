@@ -40,6 +40,22 @@ if (!function_exists('buatKodeAnggota')) {
     }
 }
 
+if (!function_exists('kunciKodeAnggota')) {
+    /**
+     * Kunci pembuatan kode anggota selama proses simpan (sampai dilepas / koneksi berakhir), supaya Admin dan
+     * Teller yang menambah anggota bersamaan tidak mendapat kode yang sama. Panggil SEBELUM buatKodeAnggota().
+     */
+    function kunciKodeAnggota($db) {
+        $db->query("SELECT GET_LOCK('kode_anggota_koperasi', 10)")->fetchColumn();
+    }
+}
+
+if (!function_exists('lepasKodeAnggota')) {
+    function lepasKodeAnggota($db) {
+        $db->query("SELECT RELEASE_LOCK('kode_anggota_koperasi')")->fetchColumn();
+    }
+}
+
 if (!function_exists('riwayatAnggota')) {
     /** @return array label => jumlah baris terkait yang mencegah penghapusan */
     function riwayatAnggota($db, $anggota_id) {
@@ -133,6 +149,7 @@ if (!function_exists('migrasiRevisiBelumDijalankan')) {
                 ['angsuran', 'cara_bayar'], ['pinjaman', 'foto_pencairan'],
                 ['pinjaman', 'tanggal_lunas'], ['users', 'foto_profil'],
                 ['angsuran', 'denda_manual'], ['denda_tarif', 'denda_per_hari'],
+                ['pengajuan_pembatalan_angsuran', 'aktif'],
             ];
             $ada = 0;
             $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS

@@ -5,10 +5,15 @@ require_once '../config/config.php';
 // Upload melebihi post_max_size membuat $_POST kosong; tampilkan pesan yang jelas
 cekPostMelebihiBatas();
 
+// Kode anggota berikutnya untuk form tambah (sama dengan Admin: buatKodeAnggota)
+$kode_otomatis = buatKodeAnggota($db);
+
 // Handle form actions
 if ($_POST) {
     if (isset($_POST['add'])) {
-        $kode_anggota = $_POST['kode_anggota'];
+        // Kode dibuat server (kiriman form diabaikan); dikunci sampai selesai simpan agar tidak kembar
+        kunciKodeAnggota($db);
+        $kode_anggota = buatKodeAnggota($db);
         $nama_lengkap = $_POST['nama_lengkap'];
         $alamat = $_POST['alamat'];
         $telepon = $_POST['telepon'];
@@ -28,7 +33,17 @@ if ($_POST) {
             
             // Validasi dokumen (finfo, maks. 10 MB) sebelum data disimpan
             $dokumen = validasiDokumenAnggota();
-            
+
+            // No. KTP wajib & unik (sama dengan Admin)
+            if (trim($ktp) === '') {
+                throw new Exception("No. KTP harus diisi");
+            }
+            $cek_ktp = $db->prepare("SELECT id FROM anggota WHERE ktp = ?");
+            $cek_ktp->execute([trim($ktp)]);
+            if ($cek_ktp->rowCount() > 0) {
+                throw new Exception("No. KTP sudah terdaftar");
+            }
+
             // Check if kode anggota already exists
             $check_query = "SELECT id FROM anggota WHERE kode_anggota = :kode_anggota";
             $check_stmt = $db->prepare($check_query);
@@ -99,6 +114,7 @@ if ($_POST) {
             $db->rollBack();
             $_SESSION['error'] = "Gagal menambahkan anggota: " . $e->getMessage();
         }
+        lepasKodeAnggota($db);
     }
     
     if (isset($_POST['edit'])) {
@@ -125,6 +141,16 @@ if ($_POST) {
             $dokumen_lama = $stmt_dok->fetch(PDO::FETCH_ASSOC);
             $dokumen = validasiDokumenAnggota($dokumen_lama);
             
+            // No. KTP wajib & unik (sama dengan Admin)
+            if (trim($ktp) === '') {
+                throw new Exception("No. KTP harus diisi");
+            }
+            $cek_ktp = $db->prepare("SELECT id FROM anggota WHERE ktp = ? AND id != ?");
+            $cek_ktp->execute([trim($ktp), $id]);
+            if ($cek_ktp->rowCount() > 0) {
+                throw new Exception("No. KTP sudah terdaftar");
+            }
+
             // Check if kode anggota already exists (excluding current record)
             $check_query = "SELECT id FROM anggota WHERE kode_anggota = :kode_anggota AND id != :id";
             $check_stmt = $db->prepare($check_query);
@@ -569,9 +595,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">Kode Anggota *</label>
-                                    <input type="text" name="kode_anggota" class="form-control" required
-                                           placeholder="Contoh: AGT001">
-                                    <small class="text-muted">Kode unik untuk identifikasi anggota</small>
+                                    <input type="text" name="kode_anggota" id="add_kode" class="form-control" required readonly
+                                           value="<?php echo htmlspecialchars($kode_otomatis); ?>">
+                                    <small class="text-muted">Dibuat otomatis oleh sistem</small>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Nama Lengkap *</label>
@@ -730,7 +756,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">Tanggal Daftar *</label>
-                                    <input type="date" name="tanggal_daftar" id="edit_tanggal_daftar" class="form-control" required>
+                                    <input type="date" name="tanggal_daftar" id="edit_tanggal_daftar" class="form-control" readonly>
                                 </div>
                             </div>
                         </div>
