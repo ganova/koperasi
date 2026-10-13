@@ -92,6 +92,18 @@ waktu sekarang) tidak mengubah hasil tesnya. Menunggu keputusan klien: (1) pakai
 (2) tambah kolom Tanggal Pengajuan di form pengajuan (rekomendasi), atau (3) kembali ke tanggal pencairan.
 Poin 5.1 (batas Teller hanya hari ini) juga masih dicek klien.
 
+## Permintaan 6 — `prompt-revisi-koperasi-tahap3.md` (revisi tahap 3)
+
+Migrasi: `database/migrations/2026_10_revisi_tahap3.sql`.
+
+| # | Isi | Status |
+|---|---|---|
+| 1 | Pengajuan Pembatalan Pembayaran Angsuran (Teller -> Admin): Teller mengajukan dengan alasan wajib, pembayaran belum dibalik; Admin Approve (memakai fungsi batalkan yang sama) / Tolak (catatan opsional) / Cetak; riwayat di tabel `pengajuan_pembatalan_angsuran`; badge keputusan untuk Teller; penanda jumlah menunggu di halaman Admin + menu samping. **Menggantikan** batalkan langsung Teller (hari ini saja) dari 5.1: Teller kini tidak bisa membatalkan sendiri. Tombol batalkan langsung Admin dipertahankan | Selesai |
+| 2 | Tambah Anggota Teller disamakan dengan Admin: kode otomatis (fungsi yang sama) di modal Data Anggota (sebelumnya manual); Tanggal Daftar edit read-only (sebelumnya tampak bisa diubah tapi tidak tersimpan); No. KTP wajib & unik; kode dikunci saat simpan (uji 6 simpan bersamaan -> 6 kode unik) | Selesai |
+
+Perbedaan form Admin vs Teller yang ditemukan (poin 2): kode manual di modal Teller; Tanggal Daftar edit read-only di Admin tapi
+editable (tidak tersimpan) di Teller; cek KTP wajib/unik hanya di Admin.
+
 ## Hal bawaan (bukan permintaan klien)
 
 Banner "Database belum di-update", README, repo GitHub, `sql_mode` per koneksi di `config/config.php`,

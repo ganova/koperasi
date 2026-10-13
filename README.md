@@ -36,6 +36,10 @@ Aplikasi koperasi simpan pinjam (PHP + MySQL) dengan 3 level login: Admin, Telle
    ```bash
    mysql -u root koperasi_db < database/migrations/2026_10c_denda.sql
    ```
+   Dan migrasi **pengajuan pembatalan angsuran** (tahap 3), juga **sekali saja**:
+   ```bash
+   mysql -u root koperasi_db < database/migrations/2026_10_revisi_tahap3.sql
+   ```
 4. Sesuaikan koneksi database di `config/database.php` bila user/password MySQL berbeda.
 5. Atur `php.ini` lalu restart Apache:
    ```ini
@@ -57,6 +61,12 @@ tidak tersimpan. Jalankan migrasinya sekali (bisa juga lewat phpMyAdmin → data
 
 - Jenis pinjaman lama (Umum, Pendidikan, Usaha, Mendesak) perlu diisi **tarif bunga flat per tenor** di menu Admin → Jenis Pinjaman sebelum bisa dipakai di form pengajuan.
 - Anggota baru yang ditambahkan Teller mendapat akun login dengan password awal `123456`.
+
+## Pembatalan pembayaran angsuran
+
+Teller **tidak** membatalkan sendiri: pada angsuran Lunas ia menekan *Ajukan Pembatalan* (alasan wajib). Pembayaran
+belum dibalik sampai Admin memutuskan di halaman Pembayaran Angsuran: *Approve* (pembayaran dibatalkan, kas/saldo
+dikoreksi) atau *Tolak* (angsuran tetap Lunas). Admin juga masih bisa *Batalkan Pembayaran* langsung.
 
 ## Denda keterlambatan
 
