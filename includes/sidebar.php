@@ -184,6 +184,9 @@ $sidebar_pakai_avatar = in_array($current_role, ['anggota', 'teller'], true);
                             <a class="nav-link text-white-50 py-1 <?php echo $current_page == 'angsuran.php' ? 'active text-white' : ''; ?>" 
                                href="angsuran.php">
                                 <i class="fas fa-calendar-check me-2"></i> Angsuran
+                                <?php if (($n_pembatalan = jumlahPengajuanPembatalan($db)) > 0): ?>
+                                    <span class="badge bg-warning text-dark ms-1" title="Pengajuan pembatalan menunggu keputusan Admin"><?php echo $n_pembatalan; ?></span>
+                                <?php endif; ?>
                             </a>
                         </li>
                         <li class="nav-item">
@@ -398,6 +401,9 @@ $sidebar_pakai_avatar = in_array($current_role, ['anggota', 'teller'], true);
                             <a class="nav-link text-white-50 py-1 <?php echo $current_page == 'angsuran.php' ? 'active text-white' : ''; ?>" 
                                href="angsuran.php">
                                 <i class="fas fa-calendar-check me-2"></i> Angsuran
+                                <?php if (($n_pembatalan = jumlahPengajuanPembatalan($db)) > 0): ?>
+                                    <span class="badge bg-warning text-dark ms-1" title="Pengajuan pembatalan menunggu keputusan"><?php echo $n_pembatalan; ?></span>
+                                <?php endif; ?>
                             </a>
                         </li>
                         <li class="nav-item">

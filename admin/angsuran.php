@@ -28,7 +28,7 @@ perbaruiDendaOtomatis($db);
 
 // Handle payment
 if ($_POST) {
-    // Koreksi: batalkan pembayaran yang salah pencet (hanya Admin, alasan wajib)
+    // Koreksi langsung (HANYA Admin; fungsi memeriksa peran di server)
     if (isset($_POST['batalkan_bayar'])) {
         try {
             $_SESSION['success'] = batalkanPembayaranAngsuran(
@@ -39,6 +39,39 @@ if ($_POST) {
             );
         } catch (Exception $e) {
             $_SESSION['error'] = "Gagal membatalkan pembayaran: " . $e->getMessage();
+        }
+        header("Location: angsuran.php" . (isset($_GET['pinjaman_id']) ? "?pinjaman_id=" . (int) $_GET['pinjaman_id'] : ""));
+        exit();
+    }
+
+    // Teller mengajukan pembatalan (pembayaran belum dibalik sampai Admin memutuskan)
+    if (isset($_POST['ajukan_pembatalan'])) {
+        try {
+            $_SESSION['success'] = ajukanPembatalanAngsuran(
+                $db,
+                (int) $_POST['id'],
+                isset($_POST['alasan']) ? $_POST['alasan'] : '',
+                $_SESSION['user_id']
+            );
+        } catch (Exception $e) {
+            $_SESSION['error'] = "Gagal mengajukan pembatalan: " . $e->getMessage();
+        }
+        header("Location: angsuran.php" . (isset($_GET['pinjaman_id']) ? "?pinjaman_id=" . (int) $_GET['pinjaman_id'] : ""));
+        exit();
+    }
+
+    // Admin menyetujui / menolak pengajuan pembatalan (Teller ditolak di server oleh fungsi)
+    if (isset($_POST['putuskan_pembatalan'])) {
+        try {
+            $_SESSION['success'] = putuskanPembatalanAngsuran(
+                $db,
+                (int) $_POST['pengajuan_id'],
+                isset($_POST['keputusan']) && $_POST['keputusan'] === 'setuju',
+                isset($_POST['catatan']) ? $_POST['catatan'] : '',
+                $_SESSION['user_id']
+            );
+        } catch (Exception $e) {
+            $_SESSION['error'] = "Gagal memproses pengajuan pembatalan: " . $e->getMessage();
         }
         header("Location: angsuran.php" . (isset($_GET['pinjaman_id']) ? "?pinjaman_id=" . (int) $_GET['pinjaman_id'] : ""));
         exit();
@@ -257,6 +290,8 @@ $pinjaman_list = $stmt_pinjaman->fetchAll(PDO::FETCH_ASSOC);
 
 // Get installments for selected loan
 $angsuran_list = [];
+$pembatalan = [];
+$jumlah_menunggu = jumlahPengajuanPembatalan($db);
 if (isset($_GET['pinjaman_id'])) {
     $query_angsuran = "SELECT a.*, p.kode_pinjaman, p.jumlah_pinjaman
                        FROM angsuran a
@@ -267,6 +302,7 @@ if (isset($_GET['pinjaman_id'])) {
     $stmt_angsuran->bindParam(':pinjaman_id', $_GET['pinjaman_id']);
     $stmt_angsuran->execute();
     $angsuran_list = $stmt_angsuran->fetchAll(PDO::FETCH_ASSOC);
+    $pembatalan = pengajuanPembatalanTerakhir($db, array_column($angsuran_list, 'id'));
 }
 
 // Get statistics
@@ -365,6 +401,14 @@ function formatRupiah($angka) {
                     <i class="fas fa-info-circle me-2 text-primary"></i>
                     <strong>Informasi:</strong> Pembayaran angsuran akan otomatis menambah saldo kas dan tercatat di laporan transaksi.
                 </div>
+
+                <?php if ($jumlah_menunggu > 0): ?>
+                <div class="alert alert-warning py-2">
+                    <i class="fas fa-hourglass-half me-2"></i>
+                    <strong><?php echo $jumlah_menunggu; ?> pengajuan pembatalan</strong>
+                    <?php echo isAdmin() ? 'menunggu keputusan Anda (Approve / Tolak pada kolom Aksi angsuran berstatus "Pengajuan Pembatalan").' : 'menunggu keputusan Admin.'; ?>
+                </div>
+                <?php endif; ?>
 
                 <!-- Statistics Cards -->
                 <div class="row mb-4">
@@ -554,13 +598,27 @@ function formatRupiah($angka) {
                                                 <td class="text-danger"><?php echo formatRupiah($angsuran['denda']); ?></td>
                                                 <td class="fw-bold text-primary"><?php echo formatRupiah($angsuran['jumlah_angsuran']); ?></td>
                                                 <td>
-                                                    <?php if ($angsuran['status'] == 'lunas'): ?>
+                                                    <?php
+                                                    $pb = isset($pembatalan[$angsuran['id']]) ? $pembatalan[$angsuran['id']] : null;
+                                                    $menunggu = $pb && $pb['status'] === 'menunggu';
+                                                    ?>
+                                                    <?php if ($angsuran['status'] == 'lunas' && $menunggu): ?>
+                                                        <span class="badge bg-warning text-dark">Pengajuan Pembatalan</span>
+                                                        <br><small>Lunas <?php echo date('d/m', strtotime($angsuran['tanggal_bayar'])); ?></small>
+                                                    <?php elseif ($angsuran['status'] == 'lunas'): ?>
                                                         <span class="badge bg-success">Lunas</span>
                                                         <br><small><?php echo date('d/m', strtotime($angsuran['tanggal_bayar'])); ?></small>
                                                     <?php elseif ($angsuran['status'] == 'telat'): ?>
                                                         <span class="badge bg-warning">Telat</span>
                                                     <?php else: ?>
                                                         <span class="badge bg-danger">Belum Bayar</span>
+                                                    <?php endif; ?>
+                                                    <?php if ($pb && $pb['status'] === 'ditolak' && $angsuran['status'] == 'lunas'): ?>
+                                                        <br><span class="badge bg-danger" title="<?php echo htmlspecialchars($pb['catatan_admin']); ?>">Pembatalan Ditolak</span>
+                                                        <?php if (!empty($pb['catatan_admin'])): ?><br><small class="text-muted"><?php echo htmlspecialchars($pb['catatan_admin']); ?></small><?php endif; ?>
+                                                    <?php elseif ($pb && $pb['status'] === 'disetujui' && $angsuran['status'] != 'lunas'): ?>
+                                                        <br><span class="badge bg-info" title="<?php echo htmlspecialchars($pb['catatan_admin']); ?>">Pembatalan Disetujui</span>
+                                                        <?php if (!empty($pb['catatan_admin'])): ?><br><small class="text-muted"><?php echo htmlspecialchars($pb['catatan_admin']); ?></small><?php endif; ?>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td class="table-actions">
@@ -590,7 +648,34 @@ function formatRupiah($angka) {
                                                            title="Cetak Bukti Pembayaran">
                                                             <i class="fas fa-print"></i>
                                                         </a>
-                                                        <?php if (isAdmin() || date('Y-m-d', strtotime($angsuran['tanggal_bayar'])) === date('Y-m-d')): ?>
+                                                        <?php
+                                                        $data_baris = 'data-angsuran_ke="' . (int) $angsuran['angsuran_ke'] . '"'
+                                                            . ' data-kode="' . htmlspecialchars($angsuran['kode_pinjaman']) . '"'
+                                                            . ' data-total="' . ($angsuran['jumlah_angsuran'] + $angsuran['denda']) . '"';
+                                                        ?>
+                                                        <?php if (isAdmin() && $menunggu): ?>
+                                                        <button type="button" class="btn btn-sm btn-success ms-1" data-bs-toggle="modal" data-bs-target="#putusModal"
+                                                                data-keputusan="setuju" data-pengajuan="<?php echo (int) $pb['id']; ?>" <?php echo $data_baris; ?>
+                                                                data-teller="<?php echo htmlspecialchars($pb['teller_nama']); ?>"
+                                                                data-tanggal="<?php echo date('d/m/Y H:i', strtotime($pb['tanggal_pengajuan'])); ?>"
+                                                                data-alasan="<?php echo htmlspecialchars($pb['alasan']); ?>" title="Approve pembatalan">
+                                                            <i class="fas fa-check"></i> Approve
+                                                        </button>
+                                                        <button type="button" class="btn btn-sm btn-danger ms-1" data-bs-toggle="modal" data-bs-target="#putusModal"
+                                                                data-keputusan="tolak" data-pengajuan="<?php echo (int) $pb['id']; ?>" <?php echo $data_baris; ?>
+                                                                data-teller="<?php echo htmlspecialchars($pb['teller_nama']); ?>"
+                                                                data-tanggal="<?php echo date('d/m/Y H:i', strtotime($pb['tanggal_pengajuan'])); ?>"
+                                                                data-alasan="<?php echo htmlspecialchars($pb['alasan']); ?>" title="Tolak pengajuan">
+                                                            <i class="fas fa-times"></i> Tolak
+                                                        </button>
+                                                        <?php elseif (isTeller() && !$menunggu): ?>
+                                                        <button type="button" class="btn btn-sm btn-outline-warning ms-1" data-bs-toggle="modal" data-bs-target="#ajukanModal"
+                                                                data-id="<?php echo (int) $angsuran['id']; ?>" <?php echo $data_baris; ?>
+                                                                title="Ajukan pembatalan pembayaran ke Admin">
+                                                            <i class="fas fa-undo"></i> Ajukan Pembatalan
+                                                        </button>
+                                                        <?php endif; ?>
+                                                        <?php if (isAdmin() && !$menunggu): ?>
                                                         <button type="button" class="btn btn-sm btn-outline-danger ms-1" data-bs-toggle="modal"
                                                                 data-bs-target="#batalModal"
                                                                 data-id="<?php echo (int) $angsuran['id']; ?>"
@@ -664,7 +749,8 @@ function formatRupiah($angka) {
         </div>
     </div>
 
-    <!-- Batalkan Pembayaran Modal (koreksi, hanya Admin) -->
+    <?php if (isAdmin()): ?>
+    <!-- Batalkan Pembayaran langsung (koreksi, hanya Admin) -->
     <div class="modal fade" id="batalModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -686,8 +772,7 @@ function formatRupiah($angka) {
                         <div class="alert alert-info mb-0">
                             <small><i class="fas fa-info-circle me-1"></i>
                             Cicilan kembali <strong>belum bayar</strong>, kas dan saldo dikurangi sebesar nominal tercatat,
-                            dan koreksi ini dicatat (siapa &amp; alasannya). Cicilan bisa dibayar ulang setelahnya.
-                            <?php if (isTeller()): ?><br>Teller hanya dapat membatalkan pembayaran yang dicatat hari ini.<?php endif; ?></small>
+                            dan koreksi ini dicatat (siapa &amp; alasannya). Cicilan bisa dibayar ulang setelahnya.</small>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -699,16 +784,126 @@ function formatRupiah($angka) {
         </div>
     </div>
 
+    <!-- Approve / Tolak pengajuan pembatalan dari Teller -->
+    <div class="modal fade" id="putusModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="putus_judul"></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="pengajuan_id" id="putus_id">
+                        <input type="hidden" name="keputusan" id="putus_keputusan">
+                        <p class="fw-bold mb-1">Angsuran ke-<span id="putus_ke"></span> &mdash; <span id="putus_kode"></span></p>
+                        <p class="mb-2">Nominal tercatat: <strong id="putus_total"></strong></p>
+                        <div class="border rounded p-2 mb-3 bg-light">
+                            <div class="small text-muted">Diajukan oleh <strong id="putus_teller"></strong> pada <span id="putus_tanggal"></span></div>
+                            <div class="mt-1"><span class="text-muted">Alasan Teller:</span><br><strong id="putus_alasan"></strong></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="putus_catatan" class="form-label">Catatan Admin <span id="putus_catatan_opsi" class="text-muted">(opsional)</span></label>
+                            <textarea name="catatan" id="putus_catatan" class="form-control" rows="2" maxlength="250"
+                                      placeholder="Catatan untuk Teller..."></textarea>
+                        </div>
+                        <div class="alert mb-0" id="putus_info"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" name="putuskan_pembatalan" class="btn" id="putus_submit"></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (isTeller()): ?>
+    <!-- Ajukan pembatalan pembayaran (diputuskan Admin) -->
+    <div class="modal fade" id="ajukanModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST">
+                    <div class="modal-header">
+                        <h5 class="modal-title text-warning">Ajukan Pembatalan</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="id" id="ajukan_id">
+                        <p>Ajukan pembatalan pembayaran:</p>
+                        <p class="fw-bold mb-1">Angsuran ke-<span id="ajukan_ke"></span> &mdash; <span id="ajukan_kode"></span></p>
+                        <p class="mb-3">Nominal tercatat: <strong id="ajukan_total"></strong></p>
+                        <div class="mb-3">
+                            <label for="ajukan_alasan" class="form-label">Alasan Pembatalan <span class="text-danger">*</span></label>
+                            <textarea name="alasan" id="ajukan_alasan" class="form-control" rows="3" required minlength="5" maxlength="250"
+                                      placeholder="Contoh: salah klik bayar, nasabah belum membayar"></textarea>
+                        </div>
+                        <div class="alert alert-info mb-0">
+                            <small><i class="fas fa-info-circle me-1"></i>
+                            Pembayaran <strong>belum dibatalkan</strong>: kas, laporan, dan sisa tagihan tetap seperti sudah dibayar
+                            sampai Admin menyetujui. Anda bisa melihat hasilnya di halaman ini.</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" name="ajukan_pembatalan" class="btn btn-warning">Kirim Pengajuan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.getElementById('batalModal').addEventListener('show.bs.modal', function (event) {
-            var b = event.relatedTarget;
-            document.getElementById('batal_id').value = b.getAttribute('data-id');
-            document.getElementById('batal_ke').textContent = b.getAttribute('data-angsuran_ke');
-            document.getElementById('batal_kode').textContent = b.getAttribute('data-kode');
-            document.getElementById('batal_total').textContent = 'Rp ' + Number(b.getAttribute('data-total')).toLocaleString('id-ID');
-            document.getElementById('batal_alasan').value = '';
-        });
+        function isiModalAngsuran(prefix, b) {
+            document.getElementById(prefix + '_ke').textContent = b.getAttribute('data-angsuran_ke');
+            document.getElementById(prefix + '_kode').textContent = b.getAttribute('data-kode');
+            document.getElementById(prefix + '_total').textContent = 'Rp ' + Number(b.getAttribute('data-total')).toLocaleString('id-ID');
+        }
+        var batalModalEl = document.getElementById('batalModal');
+        if (batalModalEl) {
+            batalModalEl.addEventListener('show.bs.modal', function (event) {
+                var b = event.relatedTarget;
+                document.getElementById('batal_id').value = b.getAttribute('data-id');
+                isiModalAngsuran('batal', b);
+                document.getElementById('batal_alasan').value = '';
+            });
+        }
+        var ajukanModalEl = document.getElementById('ajukanModal');
+        if (ajukanModalEl) {
+            ajukanModalEl.addEventListener('show.bs.modal', function (event) {
+                var b = event.relatedTarget;
+                document.getElementById('ajukan_id').value = b.getAttribute('data-id');
+                isiModalAngsuran('ajukan', b);
+                document.getElementById('ajukan_alasan').value = '';
+            });
+        }
+        var putusModalEl = document.getElementById('putusModal');
+        if (putusModalEl) {
+            putusModalEl.addEventListener('show.bs.modal', function (event) {
+                var b = event.relatedTarget;
+                var setuju = b.getAttribute('data-keputusan') === 'setuju';
+                document.getElementById('putus_id').value = b.getAttribute('data-pengajuan');
+                document.getElementById('putus_keputusan').value = b.getAttribute('data-keputusan');
+                isiModalAngsuran('putus', b);
+                document.getElementById('putus_teller').textContent = b.getAttribute('data-teller');
+                document.getElementById('putus_tanggal').textContent = b.getAttribute('data-tanggal');
+                document.getElementById('putus_alasan').textContent = b.getAttribute('data-alasan');
+                document.getElementById('putus_catatan').value = '';
+                document.getElementById('putus_judul').textContent = setuju ? 'Setujui Pembatalan Pembayaran' : 'Tolak Pengajuan Pembatalan';
+                document.getElementById('putus_judul').className = 'modal-title ' + (setuju ? 'text-success' : 'text-danger');
+                var info = document.getElementById('putus_info');
+                info.className = 'alert mb-0 ' + (setuju ? 'alert-warning' : 'alert-info');
+                info.innerHTML = setuju
+                    ? '<small><i class="fas fa-exclamation-triangle me-1"></i>Pembayaran <strong>dibatalkan</strong>: cicilan kembali belum bayar, kas dan saldo dikurangi sebesar nominal tercatat, dan sisa tagihan bertambah.</small>'
+                    : '<small><i class="fas fa-info-circle me-1"></i>Angsuran tetap <strong>Lunas</strong>, tanpa perubahan saldo. Teller melihat penolakan beserta catatan Anda.</small>';
+                var btn = document.getElementById('putus_submit');
+                btn.className = 'btn ' + (setuju ? 'btn-success' : 'btn-danger');
+                btn.textContent = setuju ? 'Setujui & Batalkan Pembayaran' : 'Tolak Pengajuan';
+            });
+        }
     </script>
     <script>
         // Bayar Modal
