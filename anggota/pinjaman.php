@@ -673,9 +673,10 @@ usort($angsuran_lunas, function ($x, $y) {
             var button = event.relatedTarget;
             var pinjaman = JSON.parse(button.getAttribute('data-pinjaman'));
             
-            var pokok_dibayar = pinjaman.total_pokok_dibayar;
-            var sisa_pokok = pinjaman.sisa_pokok > 0 ? pinjaman.sisa_pokok : 0;
-            var sisa_bunga = pinjaman.sisa_bunga;
+            // Nilai DECIMAL dari JSON berupa string: ubah ke angka agar "+" menjumlah, bukan menyambung teks
+            var pokok_dibayar = Number(pinjaman.total_pokok_dibayar) || 0;
+            var sisa_pokok = Number(pinjaman.sisa_pokok) > 0 ? Number(pinjaman.sisa_pokok) : 0;
+            var sisa_bunga = Number(pinjaman.sisa_bunga) || 0;
             var total_tagihan = sisa_pokok + sisa_bunga;
             
             var status_badge = '';
