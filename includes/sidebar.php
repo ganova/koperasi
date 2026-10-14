@@ -609,6 +609,24 @@ $sidebar_pakai_avatar = in_array($current_role, ['anggota', 'teller'], true);
     box-shadow: 2px 0 5px rgba(0,0,0,0.1);
 }
 
+/* Konten utama selalu bergeser selebar sidebar (sebelumnya memakai kolom persen sehingga
+   tertutup sidebar di laptop 1366px dan tablet; hanya aman di monitor lebar) */
+@media (min-width: 768px) {
+    main.col-md-9 {
+        margin-left: 280px !important;
+        width: calc(100% - 280px) !important;
+        max-width: none;
+        flex: 0 0 auto;
+    }
+}
+@media (min-width: 768px) and (max-width: 1199.98px) {
+    .sidebar { width: 230px; }
+    main.col-md-9 {
+        margin-left: 230px !important;
+        width: calc(100% - 230px) !important;
+    }
+}
+
 /* Mobile styles */
 @media (max-width: 767.98px) {
     .sidebar {
