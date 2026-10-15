@@ -124,6 +124,13 @@ ditandai lunas tanpa masuk kas, denda cicilan yang belum dibayar tetap berjalan 
 | 8.1 | Isian wajib **Hari Angsuran** (Senin-Minggu) di form pengajuan Teller (`pengajuan_pinjaman.hari_angsuran`, migrasi `2026_10e_hari_angsuran.sql`); tampil di daftar pengajuan Admin dan Teller. Admin tidak membuat pengajuan, jadi isiannya hanya di form Teller | Selesai |
 | 8.2 | Menu Angsuran (Admin & Teller): filter hari Semua/Senin..Minggu dengan jumlah per hari, digabung dengan filter pembatalan. Hari hanya kategori: jatuh tempo tetap dari tanggal pencairan | Selesai |
 
+## Permintaan 9 — perbaikan kecil lanjutan tahap 3 (15 Okt 2026, berkas prompt)
+
+| # | Isi | Status |
+|---|---|---|
+| 9.1 | Kode Anggota di form Edit (Admin & Teller) read-only; server mengabaikan kiriman form dan mengambil kode dari DB berdasarkan ID (uji: kode palsu tidak mengubah kode maupun username login) | Selesai |
+| 9.2 | Field Email dihapus dari form Edit (Admin & Teller) dan dikeluarkan dari UPDATE (email lama tidak tertimpa; kolom DB tidak diubah). Form Tambah sudah tanpa email. Baris email di Daftar Anggota Teller dihapus; tabel cetak di `teller/tambah_anggota.php` masih punya kolom Email (tidak diubah) | Selesai |
+
 ## Hal bawaan (bukan permintaan klien)
 
 Banner "Database belum di-update", README, repo GitHub, `sql_mode` per koneksi di `config/config.php`,

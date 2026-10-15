@@ -119,11 +119,13 @@ if ($_POST) {
     
     if (isset($_POST['edit'])) {
         $id = $_POST['id'];
-        $kode_anggota = $_POST['kode_anggota'];
+        // Kode anggota TIDAK bisa diubah: selalu diambil dari database berdasarkan ID (kiriman form diabaikan)
+        $stmt_kode = $db->prepare("SELECT kode_anggota FROM anggota WHERE id = ?");
+        $stmt_kode->execute([$id]);
+        $kode_anggota = (string) $stmt_kode->fetchColumn();
         $nama_lengkap = $_POST['nama_lengkap'];
         $alamat = $_POST['alamat'];
         $telepon = $_POST['telepon'];
-        $email = isset($_POST['email']) ? $_POST['email'] : ''; // form tambah teller tidak memakai email
         $tempat_lahir = $_POST['tempat_lahir'];
         $tanggal_lahir = tanggalAtauNull(isset($_POST['tanggal_lahir']) ? $_POST['tanggal_lahir'] : '');
         $jenis_kelamin = $_POST['jenis_kelamin'];
@@ -141,6 +143,9 @@ if ($_POST) {
             $dokumen_lama = $stmt_dok->fetch(PDO::FETCH_ASSOC);
             $dokumen = validasiDokumenAnggota($dokumen_lama);
             
+            if ($kode_anggota === '') {
+                throw new Exception("Anggota tidak ditemukan");
+            }
             // No. KTP wajib & unik (sama dengan Admin)
             if (trim($ktp) === '') {
                 throw new Exception("No. KTP harus diisi");
@@ -151,29 +156,17 @@ if ($_POST) {
                 throw new Exception("No. KTP sudah terdaftar");
             }
 
-            // Check if kode anggota already exists (excluding current record)
-            $check_query = "SELECT id FROM anggota WHERE kode_anggota = :kode_anggota AND id != :id";
-            $check_stmt = $db->prepare($check_query);
-            $check_stmt->bindParam(':kode_anggota', $kode_anggota);
-            $check_stmt->bindParam(':id', $id);
-            $check_stmt->execute();
-            
-            if ($check_stmt->rowCount() > 0) {
-                throw new Exception("Kode anggota sudah digunakan");
-            }
-        
-            $query = "UPDATE anggota SET kode_anggota = :kode_anggota, nama_lengkap = :nama_lengkap, 
-                      alamat = :alamat, telepon = :telepon, email = :email, tempat_lahir = :tempat_lahir,
+            // kode_anggota & email sengaja tidak di-UPDATE (kode tetap, email lama tidak tertimpa)
+            $query = "UPDATE anggota SET nama_lengkap = :nama_lengkap,
+                      alamat = :alamat, telepon = :telepon, tempat_lahir = :tempat_lahir,
                       tanggal_lahir = :tanggal_lahir, jenis_kelamin = :jenis_kelamin, pekerjaan = :pekerjaan,
                       ktp = :ktp, rekening_bank = :rekening_bank, status = :status
                       WHERE id = :id";
             $stmt = $db->prepare($query);
             $stmt->bindParam(':id', $id);
-            $stmt->bindParam(':kode_anggota', $kode_anggota);
             $stmt->bindParam(':nama_lengkap', $nama_lengkap);
             $stmt->bindParam(':alamat', $alamat);
             $stmt->bindParam(':telepon', $telepon);
-            $stmt->bindParam(':email', $email);
             $stmt->bindParam(':tempat_lahir', $tempat_lahir);
             $stmt->bindParam(':tanggal_lahir', $tanggal_lahir);
             $stmt->bindParam(':jenis_kelamin', $jenis_kelamin);
@@ -498,7 +491,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                     </div>
                                                     <div>
                                                         <div class="fw-semibold"><?php echo $anggota['nama_lengkap']; ?></div>
-                                                        <small class="text-muted"><?php echo $anggota['email']; ?></small>
                                                     </div>
                                                 </div>
                                             </td>
@@ -687,7 +679,9 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">Kode Anggota *</label>
-                                    <input type="text" name="kode_anggota" id="edit_kode" class="form-control" required>
+                                    <input type="text" name="kode_anggota" id="edit_kode" class="form-control" readonly
+                                           style="background-color:#e9ecef">
+                                    <small class="text-muted">Kode anggota digenerate otomatis dan tidak bisa diubah</small>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Nama Lengkap *</label>
@@ -700,10 +694,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                 <div class="mb-3">
                                     <label class="form-label">Telepon</label>
                                     <input type="text" name="telepon" id="edit_telepon" class="form-control">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" name="email" id="edit_email" class="form-control">
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -814,7 +804,6 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
             document.getElementById('edit_nama').value = button.getAttribute('data-nama');
             document.getElementById('edit_alamat').value = button.getAttribute('data-alamat');
             document.getElementById('edit_telepon').value = button.getAttribute('data-telepon');
-            document.getElementById('edit_email').value = button.getAttribute('data-email');
             document.getElementById('edit_tempat_lahir').value = button.getAttribute('data-tempat_lahir');
             document.getElementById('edit_tanggal_lahir').value = button.getAttribute('data-tanggal_lahir');
             document.getElementById('edit_jenis_kelamin').value = button.getAttribute('data-jenis_kelamin');
