@@ -117,6 +117,13 @@ ditandai lunas tanpa masuk kas, denda cicilan yang belum dibayar tetap berjalan 
 | 7.3 | Teller hanya bisa **mengajukan pembatalan untuk pembayaran hari ini** (tombol hilang untuk hari sebelumnya, dicek juga di server) | Selesai |
 | 7.4 | Status pembatalan di daftar angsuran: kuning = menunggu, hijau = Disetujui (Approve Admin), merah = Ditolak Admin. Menu Angsuran Teller: indikator hijau/merah + jumlah keputusan Admin yang belum dilihat (hilang setelah halaman Angsuran dibuka; kolom `dilihat_teller`) | Selesai |
 
+## Permintaan 8 — Hari Angsuran pada pengajuan (15 Okt 2026) [di luar cakupan P1]
+
+| # | Isi | Status |
+|---|---|---|
+| 8.1 | Isian wajib **Hari Angsuran** (Senin-Minggu) di form pengajuan Teller (`pengajuan_pinjaman.hari_angsuran`, migrasi `2026_10e_hari_angsuran.sql`); tampil di daftar pengajuan Admin dan Teller. Admin tidak membuat pengajuan, jadi isiannya hanya di form Teller | Selesai |
+| 8.2 | Menu Angsuran (Admin & Teller): filter hari Semua/Senin..Minggu dengan jumlah per hari, digabung dengan filter pembatalan. Hari hanya kategori: jatuh tempo tetap dari tanggal pencairan | Selesai |
+
 ## Hal bawaan (bukan permintaan klien)
 
 Banner "Database belum di-update", README, repo GitHub, `sql_mode` per koneksi di `config/config.php`,

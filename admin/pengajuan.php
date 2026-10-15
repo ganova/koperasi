@@ -275,6 +275,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                         </td>
                                         <td>
                                             <span class="badge bg-info"><?php echo labelTenorRow($pengajuan); ?></span>
+                                            <br><small class="text-muted">Hari angsuran: <?php echo labelHariAngsuran(isset($pengajuan['hari_angsuran']) ? $pengajuan['hari_angsuran'] : null); ?></small>
                                         </td>
                                         <td>
                                             <span class="badge bg-success"><?php echo labelBungaRow($pengajuan); ?></span>

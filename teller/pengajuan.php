@@ -67,6 +67,11 @@ if ($_POST && isset($_POST['ajukan_pinjaman'])) {
             throw new Exception("Frekuensi angsuran tidak diizinkan untuk jenis pinjaman ini");
         }
 
+        $hari_angsuran = isset($_POST['hari_angsuran']) ? (int) $_POST['hari_angsuran'] : 0;
+        if ($hari_angsuran < 1 || $hari_angsuran > 7) {
+            throw new Exception("Hari angsuran wajib dipilih (Senin - Minggu)");
+        }
+
         // Tanggal pengajuan (boleh lampau untuk data lama, tidak boleh masa depan)
         $tgl_ajuan = isset($_POST['tanggal_pengajuan']) ? trim($_POST['tanggal_pengajuan']) : date('Y-m-d');
         $dt = DateTime::createFromFormat('Y-m-d', $tgl_ajuan);
@@ -84,11 +89,12 @@ if ($_POST && isset($_POST['ajukan_pinjaman'])) {
 
         // Insert pengajuan (skema flat)
         $query = "INSERT INTO pengajuan_pinjaman (kode_pengajuan, anggota_id, jenis_pinjaman_id,
-                  jumlah_pinjaman, tenor, bunga, skema_bunga, frekuensi, tujuan_pinjaman, user_id, tanggal_pengajuan)
+                  jumlah_pinjaman, tenor, bunga, skema_bunga, frekuensi, tujuan_pinjaman, user_id, tanggal_pengajuan, hari_angsuran)
                   VALUES (:kode_pengajuan, :anggota_id, :jenis_pinjaman_id,
-                  :jumlah_pinjaman, :tenor, :bunga, 'flat', :frekuensi, :tujuan_pinjaman, :user_id, :tanggal_pengajuan)";
+                  :jumlah_pinjaman, :tenor, :bunga, 'flat', :frekuensi, :tujuan_pinjaman, :user_id, :tanggal_pengajuan, :hari_angsuran)";
         $stmt = $db->prepare($query);
         $stmt->bindParam(':tanggal_pengajuan', $waktu_ajuan);
+        $stmt->bindParam(':hari_angsuran', $hari_angsuran);
         $stmt->bindParam(':kode_pengajuan', $kode_pengajuan);
         $stmt->bindParam(':anggota_id', $anggota_id);
         $stmt->bindParam(':jenis_pinjaman_id', $jenis_pinjaman_id);
@@ -373,6 +379,17 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                     </div>
                                     
                                     <div class="mb-3">
+                                        <label class="form-label">Hari Angsuran *</label>
+                                        <select name="hari_angsuran" class="form-select" required>
+                                            <option value="">-- Pilih hari --</option>
+                                            <?php foreach (daftarHariAngsuran() as $no => $nama_hari): ?>
+                                            <option value="<?php echo $no; ?>"><?php echo $nama_hari; ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <small class="text-muted">Hari nasabah membayar angsuran; dipakai untuk memfilter menu Angsuran.</small>
+                                    </div>
+
+                                    <div class="mb-3">
                                         <label class="form-label">Tanggal Pengajuan *</label>
                                         <input type="date" name="tanggal_pengajuan" class="form-control" required
                                                value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>">
@@ -470,7 +487,7 @@ $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
                                                 <td>
                                                     <small><?php echo $pengajuan['nama_jenis']; ?></small>
                                                     <br>
-                                                    <small class="text-muted"><?php echo $pengajuan['tenor']; ?> bln</small>
+                                                    <small class="text-muted"><?php echo $pengajuan['tenor']; ?> bln · <?php echo labelHariAngsuran(isset($pengajuan['hari_angsuran']) ? $pengajuan['hari_angsuran'] : null); ?></small>
                                                 </td>
                                                 <td>
                                                     <div class="fw-bold text-primary"><?php echo formatRupiah($pengajuan['jumlah_pinjaman']); ?></div>

@@ -277,6 +277,20 @@ if (!function_exists('buatPinjamanDanJadwal')) {
     }
 }
 
+if (!function_exists('daftarHariAngsuran')) {
+    /** 1 = Senin ... 7 = Minggu (kategori hari angsuran pada pengajuan). */
+    function daftarHariAngsuran() {
+        return array(1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu');
+    }
+}
+
+if (!function_exists('labelHariAngsuran')) {
+    function labelHariAngsuran($hari) {
+        $d = daftarHariAngsuran();
+        return isset($d[(int) $hari]) ? $d[(int) $hari] : '-';
+    }
+}
+
 if (!function_exists('tandaiCicilanDimuka')) {
     /**
      * Data lama: cicilan 1..$sampai_ke ditandai sudah dibayar sebelum memakai aplikasi.

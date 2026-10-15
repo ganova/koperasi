@@ -274,7 +274,10 @@ $stmt_debug->execute();
 $all_pinjaman = $stmt_debug->fetchAll(PDO::FETCH_ASSOC);
 
 // Get active loans - Tampilkan semua pinjaman yang punya angsuran
-$query_pinjaman = "SELECT p.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis,
+$kolom_hari = kolomAda($db, 'pengajuan_pinjaman', 'hari_angsuran')
+    ? "(SELECT pp.hari_angsuran FROM pengajuan_pinjaman pp WHERE pp.id = p.pengajuan_id) AS hari_angsuran,"
+    : "NULL AS hari_angsuran,";
+$query_pinjaman = "SELECT p.*, a.nama_lengkap, a.kode_anggota, jp.nama_jenis, $kolom_hari
                           (SELECT COUNT(*) FROM angsuran WHERE pinjaman_id = p.id) as total_angsuran,
                           (SELECT COUNT(*) FROM angsuran WHERE pinjaman_id = p.id AND status = 'lunas') as angsuran_lunas
                    FROM pinjaman p
@@ -325,7 +328,24 @@ if ($filter_pb !== '') {
         return $pj['n_pb'][$filter_pb] > 0;
     }));
 }
-$qs_filter = $filter_pb !== '' ? '&filter=' . $filter_pb : '';
+// Filter hari angsuran (Senin - Minggu), digabung dengan filter pengajuan pembatalan
+$jumlah_hari = array_fill(1, 7, 0);
+foreach ($pinjaman_list as $pj) {
+    if (!empty($pj['hari_angsuran'])) {
+        $jumlah_hari[(int) $pj['hari_angsuran']]++;
+    }
+}
+$filter_hari = isset($_GET['hari']) ? (int) $_GET['hari'] : 0;
+if ($filter_hari < 1 || $filter_hari > 7) {
+    $filter_hari = 0;
+} else {
+    $pinjaman_list = array_values(array_filter($pinjaman_list, function ($pj) use ($filter_hari) {
+        return (int) $pj['hari_angsuran'] === $filter_hari;
+    }));
+}
+$qs_filter = ($filter_pb !== '' ? '&filter=' . $filter_pb : '') . ($filter_hari ? '&hari=' . $filter_hari : '');
+$qs_hari = $filter_hari ? '&hari=' . $filter_hari : '';
+$qs_pb = $filter_pb !== '' ? '&filter=' . $filter_pb : '';
 
 // Get installments for selected loan
 $angsuran_list = [];
@@ -530,10 +550,19 @@ function formatRupiah($angka) {
                                         ? array('menunggu' => array('Pengajuan Pembatalan', 'warning'))
                                         : array('menunggu' => array('Pengajuan', 'warning'), 'disetujui' => array('Approve', 'success'), 'ditolak' => array('Tolak', 'danger'));
                                     ?>
-                                    <a href="angsuran.php" class="btn btn-sm <?php echo $filter_pb === '' ? 'btn-secondary' : 'btn-outline-secondary'; ?>">Semua</a>
+                                    <a href="angsuran.php<?php echo $filter_hari ? '?hari=' . $filter_hari : ''; ?>" class="btn btn-sm <?php echo $filter_pb === '' ? 'btn-secondary' : 'btn-outline-secondary'; ?>">Semua</a>
                                     <?php foreach ($chips as $kunci => $c): ?>
-                                    <a href="?filter=<?php echo $kunci; ?>" class="btn btn-sm <?php echo $filter_pb === $kunci ? 'btn-' . $c[1] : 'btn-outline-' . $c[1]; ?>">
+                                    <a href="?filter=<?php echo $kunci . $qs_hari; ?>" class="btn btn-sm <?php echo $filter_pb === $kunci ? 'btn-' . $c[1] : 'btn-outline-' . $c[1]; ?>">
                                         <?php echo $c[0]; ?> <span class="badge bg-<?php echo $c[1]; ?> <?php echo $c[1] === 'warning' ? 'text-dark' : ''; ?>"><?php echo $jumlah_filter[$kunci]; ?></span>
+                                    </a>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div class="mb-3 d-flex flex-wrap gap-1 align-items-center">
+                                    <small class="text-muted me-1">Hari angsuran:</small>
+                                    <a href="angsuran.php<?php echo $qs_pb ? '?' . ltrim($qs_pb, '&') : ''; ?>" class="btn btn-sm <?php echo !$filter_hari ? 'btn-primary' : 'btn-outline-primary'; ?>">Semua</a>
+                                    <?php foreach (daftarHariAngsuran() as $no => $nama_hari): ?>
+                                    <a href="?hari=<?php echo $no . $qs_pb; ?>" class="btn btn-sm <?php echo $filter_hari === $no ? 'btn-primary' : 'btn-outline-primary'; ?>">
+                                        <?php echo $nama_hari; ?> <span class="badge bg-secondary"><?php echo $jumlah_hari[$no]; ?></span>
                                     </a>
                                     <?php endforeach; ?>
                                 </div>
@@ -567,7 +596,7 @@ function formatRupiah($angka) {
                                                         <?php echo $pinjaman['status']; ?>
                                                     </span>
                                                     <small class="<?php echo isset($_GET['pinjaman_id']) && $_GET['pinjaman_id'] == $pinjaman['id'] ? 'text-white' : 'text-muted'; ?>">
-                                                        <?php echo labelTenorRow($pinjaman); ?>
+                                                        <?php echo !empty($pinjaman['hari_angsuran']) ? labelHariAngsuran($pinjaman['hari_angsuran']) . ' · ' : ''; ?><?php echo labelTenorRow($pinjaman); ?>
                                                     </small>
                                                 </div>
                                             </div>
